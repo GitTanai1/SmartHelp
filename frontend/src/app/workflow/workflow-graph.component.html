@@ -1,0 +1,245 @@
+<div class="page-header mb-4">
+  <div class="d-flex align-items-center gap-2">
+    <a [routerLink]="['/tickets', ticketId]" class="btn btn-outline-secondary btn-sm">← Ticket</a>
+    <h1 class="page-title mb-0">AI Workflow — Ticket #{{ ticketId }}</h1>
+  </div>
+  <button class="btn btn-primary btn-sm" (click)="startStream()" [disabled]="streamStatus === 'running' || streamStatus === 'connecting'">
+    @if (streamStatus === 'running' || streamStatus === 'connecting') {
+      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+      Running…
+    } @else {
+      ▶ Run Workflow
+    }
+  </button>
+</div>
+
+<!-- Status banner -->
+@if (streamStatus === 'connecting') {
+  <div class="alert alert-info py-2 mb-3" role="status">
+    Connecting to workflow stream…
+  </div>
+}
+@if (streamStatus === 'complete') {
+  <div class="alert alert-success py-2 mb-3" role="status">
+    Workflow complete. Final status: <strong>{{ finalStatus }}</strong>
+  </div>
+}
+@if (streamStatus === 'error') {
+  <div class="alert alert-danger py-2 mb-3" role="alert">
+    {{ streamError }}
+  </div>
+}
+
+<div class="workflow-layout">
+
+  <!-- SVG Graph -->
+  <div class="graph-container">
+    <p class="graph-caption mb-2 text-muted small">
+      Click a node to see its details. Green = completed · Blue = running · Grey = skipped.
+    </p>
+
+    <svg
+      [attr.viewBox]="'0 0 ' + SVG_WIDTH + ' ' + SVG_HEIGHT"
+      [attr.width]="SVG_WIDTH"
+      [attr.height]="SVG_HEIGHT"
+      class="workflow-svg"
+      role="img"
+      aria-label="AI workflow execution graph"
+    >
+      <!-- Arrowhead marker definition -->
+      <defs>
+        <marker id="arrowhead-taken" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a" />
+        </marker>
+        <marker id="arrowhead-muted" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#d1d5db" />
+        </marker>
+        <marker id="arrowhead-default" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#9ca3af" />
+        </marker>
+      </defs>
+
+      <!-- Edges -->
+      @for (edge of edges; track edge.from + '-' + edge.to) {
+        <g [attr.opacity]="getEdgeOpacity(edge)">
+          <path
+            [attr.d]="edgePath(edge)"
+            [attr.stroke]="getEdgeStroke(edge)"
+            stroke-width="2"
+            fill="none"
+            [attr.marker-end]="edge.taken ? 'url(#arrowhead-taken)' : 'url(#arrowhead-default)'"
+          />
+          @if (edge.label) {
+            <text
+              [attr.x]="edgeLabelX(edge)"
+              [attr.y]="edgeLabelY(edge) - 4"
+              text-anchor="middle"
+              class="edge-label"
+              [attr.fill]="edge.taken ? '#16a34a' : '#9ca3af'"
+            >{{ edge.label }}</text>
+          }
+        </g>
+      }
+
+      <!-- Nodes -->
+      @for (node of nodes; track node.id) {
+        <g
+          class="node-group"
+          [attr.transform]="'translate(' + node.x + ',' + node.y + ')'"
+          (click)="selectNode(node)"
+          role="button"
+          [attr.aria-label]="node.label + ' — ' + node.status"
+          [attr.aria-pressed]="selectedNode?.id === node.id"
+          tabindex="0"
+          (keydown.enter)="selectNode(node)"
+          (keydown.space)="selectNode(node)"
+        >
+          <!-- Node circle -->
+          <circle
+            [attr.r]="NODE_RADIUS"
+            [attr.fill]="getNodeFill(node)"
+            [attr.stroke]="selectedNode?.id === node.id ? '#6366f1' : getNodeStroke(node)"
+            [attr.stroke-width]="selectedNode?.id === node.id ? 3 : 2"
+          />
+
+          <!-- Running pulse ring -->
+          @if (node.status === 'RUNNING') {
+            <circle
+              [attr.r]="NODE_RADIUS + 6"
+              fill="none"
+              stroke="#3b82f6"
+              stroke-width="1.5"
+              opacity="0.5"
+              class="pulse-ring"
+            />
+          }
+
+          <!-- Status icon -->
+          <text
+            dy="-8"
+            text-anchor="middle"
+            class="node-icon"
+            [attr.fill]="getNodeTextColor(node)"
+          >{{ getStatusIcon(node.status) }}</text>
+
+          <!-- Node label (wrapped into 2 lines by splitting on space) -->
+          <text
+            dy="8"
+            text-anchor="middle"
+            class="node-label"
+            [attr.fill]="getNodeTextColor(node)"
+          >{{ node.label.split(' ')[0] }}</text>
+          <text
+            dy="22"
+            text-anchor="middle"
+            class="node-label"
+            [attr.fill]="getNodeTextColor(node)"
+          >{{ node.label.split(' ').slice(1).join(' ') }}</text>
+        </g>
+      }
+    </svg>
+  </div>
+
+  <!-- Node detail panel -->
+  <div class="detail-panel">
+    <h2 class="panel-heading mb-3">Node Details</h2>
+
+    @if (!selectedNode) {
+      <p class="text-muted small">Click a node in the graph to see its status and output.</p>
+    }
+
+    @if (selectedNode) {
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge {{ getStatusBadgeClass(selectedNode.status) }}">
+            {{ selectedNode.status }}
+          </span>
+          <strong class="small">{{ selectedNode.label }}</strong>
+        </div>
+
+        <p class="small text-muted mb-3">{{ selectedNode.description }}</p>
+
+        @if (selectedNode.message) {
+          <div class="detail-row mb-2">
+            <span class="detail-label">Message</span>
+            <span class="small">{{ selectedNode.message }}</span>
+          </div>
+        }
+
+        @if (selectedNode.lastState) {
+          <div class="state-snapshot">
+            <p class="detail-label mb-1">State snapshot</p>
+
+            @if (selectedNode.lastState.category) {
+              <div class="detail-row">
+                <span class="detail-label">Category</span>
+                <span class="small">{{ selectedNode.lastState.category }}</span>
+              </div>
+            }
+            @if (selectedNode.lastState.priority) {
+              <div class="detail-row">
+                <span class="detail-label">Priority</span>
+                <span class="small">{{ selectedNode.lastState.priority }}</span>
+              </div>
+            }
+            @if (selectedNode.id === 'CHECK_CONFIDENCE' || selectedNode.lastState.confidence > 0) {
+              <div class="detail-row">
+                <span class="detail-label">Confidence</span>
+                <span class="small">{{ confidencePercent(selectedNode.lastState) }}</span>
+              </div>
+            }
+            @if (selectedNode.id === 'CHECK_SENSITIVITY' || selectedNode.lastState.sensitive !== undefined) {
+              <div class="detail-row">
+                <span class="detail-label">Sensitive</span>
+                <span class="small">{{ selectedNode.lastState.sensitive ? 'Yes' : 'No' }}</span>
+              </div>
+            }
+            @if (selectedNode.lastState.knowledgeCount > 0) {
+              <div class="detail-row">
+                <span class="detail-label">Knowledge articles</span>
+                <span class="small">{{ selectedNode.lastState.knowledgeCount }}</span>
+              </div>
+            }
+            @if (selectedNode.lastState.finalStatus) {
+              <div class="detail-row">
+                <span class="detail-label">Final status</span>
+                <span class="small fw-semibold">{{ selectedNode.lastState.finalStatus }}</span>
+              </div>
+            }
+            @if (selectedNode.lastState.generatedResponse) {
+              <div class="mt-2">
+                <p class="detail-label mb-1">Generated response</p>
+                <p class="small response-preview">{{ selectedNode.lastState.generatedResponse | slice : 0 : 200 }}{{ selectedNode.lastState.generatedResponse.length > 200 ? '…' : '' }}</p>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Execution path -->
+    @if (executionPath.length > 0) {
+      <div class="mt-4">
+        <p class="detail-label mb-1">Execution path</p>
+        <p class="small execution-path">{{ executionPath.join(' → ') }}</p>
+      </div>
+    }
+
+    <!-- Node legend -->
+    <div class="legend mt-4">
+      <p class="detail-label mb-2">Legend</p>
+      @for (item of [
+        {status: 'PENDING',   color: '#9ca3af', label: 'Pending'},
+        {status: 'RUNNING',   color: '#3b82f6', label: 'Running'},
+        {status: 'COMPLETED', color: '#16a34a', label: 'Completed'},
+        {status: 'SKIPPED',   color: '#d1d5db', label: 'Skipped'},
+        {status: 'FAILED',    color: '#dc2626', label: 'Failed'}
+      ]; track item.status) {
+        <div class="legend-item">
+          <span class="legend-dot" [style.background]="item.color"></span>
+          <span class="small">{{ item.label }}</span>
+        </div>
+      }
+    </div>
+  </div>
+</div>
