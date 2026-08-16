@@ -1,0 +1,119 @@
+<div class="page-header mb-4">
+  <h1 class="page-title">Knowledge Base</h1>
+  <button class="btn btn-primary btn-sm" (click)="openCreateForm()">+ New Article</button>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-sm-5 col-md-3">
+      <label for="kbCategory" class="form-label form-label-sm">Category</label>
+      <select id="kbCategory" class="form-select form-select-sm"
+              [(ngModel)]="filterCategoryId" (change)="loadArticles()">
+        <option value="">All categories</option>
+        @for (c of categories; track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="col-12 col-sm-5 col-md-5">
+      <label for="kbSearch" class="form-label form-label-sm">Search</label>
+      <input id="kbSearch" type="search" class="form-control form-control-sm"
+             placeholder="Search articles…"
+             [(ngModel)]="searchQuery" />
+    </div>
+    <div class="col-12 col-sm-2 col-md-2 d-flex align-items-end">
+      <button class="btn btn-outline-primary btn-sm w-100" (click)="loadArticles()">Search</button>
+    </div>
+  </div>
+</div>
+
+<!-- Inline article form -->
+@if (showForm) {
+  <div class="form-card mb-4">
+    <h2 class="section-heading mb-3">{{ editing ? 'Edit Article' : 'New Article' }}</h2>
+    @if (formError) {
+      <div class="alert alert-danger alert-sm mb-2" role="alert">{{ formError }}</div>
+    }
+
+    <div class="mb-3">
+      <label for="articleCategory" class="form-label">Category <span class="text-danger">*</span></label>
+      <select id="articleCategory" class="form-select"
+              [(ngModel)]="formModel.categoryId">
+        <option [value]="0" disabled>Select a category</option>
+        @for (c of categories; track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="articleTitle" class="form-label">Title <span class="text-danger">*</span></label>
+      <input id="articleTitle" type="text" class="form-control"
+             placeholder="Article title"
+             [(ngModel)]="formModel.title"
+             maxlength="200" />
+    </div>
+    <div class="mb-3">
+      <label for="articleContent" class="form-label">Content <span class="text-danger">*</span></label>
+      <textarea id="articleContent" class="form-control"
+                rows="6"
+                placeholder="Support instructions and solutions…"
+                [(ngModel)]="formModel.content"></textarea>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary" (click)="saveArticle()" [disabled]="saving">
+        @if (saving) {
+          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+        }
+        {{ editing ? 'Save Changes' : 'Create Article' }}
+      </button>
+      <button class="btn btn-outline-secondary" (click)="closeForm()">Cancel</button>
+    </div>
+  </div>
+}
+
+<!-- Loading -->
+@if (loading) {
+  <div class="d-flex align-items-center gap-2 text-secondary py-4">
+    <div class="spinner-border spinner-border-sm" role="status" aria-label="Loading"></div>
+    <span>Loading articles…</span>
+  </div>
+}
+
+<!-- Error -->
+@if (error) {
+  <div class="alert alert-danger" role="alert">{{ error }}</div>
+}
+
+<!-- Empty -->
+@if (!loading && !error && articles.length === 0) {
+  <div class="empty-state">
+    <p class="empty-state-text">No knowledge articles found.</p>
+    <button class="btn btn-primary btn-sm" (click)="openCreateForm()">Create the first article</button>
+  </div>
+}
+
+<!-- Articles grid -->
+@if (!loading && !error && articles.length > 0) {
+  <div class="row g-3">
+    @for (article of articles; track article.id) {
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="article-card h-100">
+          <div class="article-header">
+            <span class="badge bg-light text-dark border">{{ getCategoryName(article.categoryId) }}</span>
+          </div>
+          <h3 class="article-title">{{ article.title }}</h3>
+          <p class="article-content">{{ article.content | slice : 0 : 180 }}{{ article.content.length > 180 ? '…' : '' }}</p>
+          <div class="article-footer">
+            <span class="text-muted small">Updated {{ article.updatedAt | date : 'MMM d, y' }}</span>
+            <div class="d-flex gap-1">
+              <button class="btn btn-outline-secondary btn-sm" (click)="openEditForm(article)">Edit</button>
+              <button class="btn btn-outline-danger btn-sm" (click)="deleteArticle(article.id)">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+  <p class="text-muted small mt-3">{{ articles.length }} article{{ articles.length !== 1 ? 's' : '' }}</p>
+}
