@@ -1,0 +1,109 @@
+<div class="page-header mb-4">
+  <h1 class="page-title">New Ticket</h1>
+</div>
+
+@if (loadingData) {
+  <div class="d-flex align-items-center gap-2 text-secondary py-4">
+    <div class="spinner-border spinner-border-sm" role="status" aria-label="Loading"></div>
+    <span>Loading form data…</span>
+  </div>
+}
+
+@if (!loadingData) {
+  <div class="form-card">
+    <form #ticketForm="ngForm" (ngSubmit)="submit(ticketForm)" novalidate>
+
+      @if (submitError) {
+        <div class="alert alert-danger mb-3" role="alert">{{ submitError }}</div>
+      }
+
+      <!-- Customer -->
+      <div class="mb-3">
+        <label for="userId" class="form-label">Customer <span class="text-danger">*</span></label>
+        <select id="userId" name="userId" class="form-select"
+                [(ngModel)]="model.userId"
+                required
+                #userIdField="ngModel">
+          <option [value]="0" disabled>Select a customer</option>
+          @for (u of users; track u.id) {
+            <option [value]="u.id">{{ u.name }} ({{ u.role }})</option>
+          }
+        </select>
+        @if (userIdField.invalid && userIdField.touched) {
+          <div class="form-text text-danger">Customer is required.</div>
+        }
+      </div>
+
+      <!-- Category -->
+      <div class="mb-3">
+        <label for="categoryId" class="form-label">Category</label>
+        <select id="categoryId" name="categoryId" class="form-select"
+                [(ngModel)]="model.categoryId">
+          <option [value]="null">No category (AI will classify)</option>
+          @for (c of categories; track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+        <div class="form-text">Optional — the AI workflow can classify the ticket automatically.</div>
+      </div>
+
+      <!-- Subject -->
+      <div class="mb-3">
+        <label for="subject" class="form-label">Subject <span class="text-danger">*</span></label>
+        <input id="subject" name="subject" type="text" class="form-control"
+               placeholder="Brief description of the issue"
+               [(ngModel)]="model.subject"
+               required
+               maxlength="200"
+               #subjectField="ngModel"
+               [class.is-invalid]="subjectField.invalid && subjectField.touched" />
+        @if (subjectField.invalid && subjectField.touched) {
+          <div class="invalid-feedback">Subject is required (max 200 characters).</div>
+        }
+      </div>
+
+      <!-- Description -->
+      <div class="mb-3">
+        <label for="description" class="form-label">
+          Description <span class="text-danger">*</span>
+        </label>
+        <textarea id="description" name="description" class="form-control"
+                  rows="5"
+                  placeholder="Detailed explanation of the problem"
+                  [(ngModel)]="model.description"
+                  required
+                  #descriptionField="ngModel"
+                  [class.is-invalid]="descriptionField.invalid && descriptionField.touched"></textarea>
+        @if (descriptionField.invalid && descriptionField.touched) {
+          <div class="invalid-feedback">Description is required.</div>
+        }
+      </div>
+
+      <!-- Priority -->
+      <div class="mb-4">
+        <label for="priority" class="form-label">Priority <span class="text-danger">*</span></label>
+        <select id="priority" name="priority" class="form-select"
+                [(ngModel)]="model.priority" required>
+          @for (p of priorityOptions; track p) {
+            <option [value]="p">{{ p }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary"
+                [disabled]="ticketForm.invalid || saving">
+          @if (saving) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            Creating…
+          } @else {
+            Create Ticket
+          }
+        </button>
+        <button type="button" class="btn btn-outline-secondary" (click)="cancel()">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+}

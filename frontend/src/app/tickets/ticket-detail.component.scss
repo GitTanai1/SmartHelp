@@ -1,0 +1,78 @@
+.detail-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.ticket-subject {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.ticket-description {
+  color: #374151;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.ticket-meta {
+  border-top: 1px solid #f3f4f6;
+  padding-top: 1rem;
+
+  .meta-label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #9ca3af;
+    margin-bottom: 0.2rem;
+  }
+}
+
+.response-item {
+  border-left: 3px solid #e5e7eb;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #f9fafb;
+  border-radius: 0 6px 6px 0;
+
+  &.response-ai {
+    border-left-color: #0dcaf0;
+    background: #f0f9ff;
+  }
+
+  .response-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .response-message {
+    margin: 0;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+}
+
+.section-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.form-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 720px;
+}
+
+.alert-sm {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+}

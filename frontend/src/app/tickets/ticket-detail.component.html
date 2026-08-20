@@ -1,0 +1,250 @@
+<div class="page-header mb-4">
+  <div class="d-flex align-items-center gap-2">
+    <a routerLink="/tickets" class="btn btn-outline-secondary btn-sm">← Back</a>
+    <h1 class="page-title mb-0">Ticket #{{ ticketId }}</h1>
+  </div>
+  @if (ticket && !editing) {
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-primary btn-sm" (click)="startEdit()">Edit</button>
+      <a [routerLink]="['/workflow', ticketId]" class="btn btn-outline-info btn-sm">
+        🤖 Live Workflow
+      </a>
+    </div>
+  }
+</div>
+
+<!-- Loading -->
+@if (loading) {
+  <div class="d-flex align-items-center gap-2 text-secondary py-4">
+    <div class="spinner-border spinner-border-sm" role="status" aria-label="Loading"></div>
+    <span>Loading ticket…</span>
+  </div>
+}
+
+<!-- Load error -->
+@if (loadError) {
+  <div class="alert alert-danger" role="alert">{{ loadError }}</div>
+}
+
+@if (!loading && !loadError && detail) {
+
+  <!-- View mode -->
+  @if (!editing) {
+    <div class="row g-4">
+
+      <!-- Left column: ticket info -->
+      <div class="col-12 col-lg-8">
+        <div class="detail-card mb-3">
+          <h2 class="ticket-subject">{{ ticket?.subject }}</h2>
+          <p class="ticket-description">{{ ticket?.description }}</p>
+
+          <div class="ticket-meta row g-2 mt-3">
+            <div class="col-6 col-md-3">
+              <span class="meta-label">Status</span>
+              <span class="badge {{ getStatusClass(ticket?.status ?? '') }}">{{ ticket?.status }}</span>
+            </div>
+            <div class="col-6 col-md-3">
+              <span class="meta-label">Priority</span>
+              <span class="badge {{ getPriorityClass(ticket?.priority ?? '') }}">{{ ticket?.priority }}</span>
+            </div>
+            <div class="col-6 col-md-3">
+              <span class="meta-label">Category</span>
+              <span class="text-muted small">{{ ticket?.categoryName ?? 'Uncategorized' }}</span>
+            </div>
+            <div class="col-6 col-md-3">
+              <span class="meta-label">Customer</span>
+              <span class="small">{{ ticket?.userName }}</span>
+            </div>
+            <div class="col-6 col-md-3">
+              <span class="meta-label">Created</span>
+              <span class="text-muted small">{{ ticket?.createdAt | date : 'MMM d, y HH:mm' }}</span>
+            </div>
+            <div class="col-6 col-md-3">
+              <span class="meta-label">Updated</span>
+              <span class="text-muted small">{{ ticket?.updatedAt | date : 'MMM d, y HH:mm' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Responses -->
+        <div class="detail-card mb-3">
+          <h3 class="section-heading mb-3">
+            Responses ({{ detail.responses.length }})
+          </h3>
+
+          @if (detail.responses.length === 0) {
+            <p class="text-muted small">No responses yet.</p>
+          }
+
+          @for (resp of detail.responses; track resp.id) {
+            <div class="response-item" [class.response-ai]="resp.senderType === 'AI'">
+              <div class="response-header">
+                <span class="badge {{ resp.senderType === 'AI' ? 'bg-info text-dark' : 'bg-secondary' }}">
+                  {{ resp.senderType }}
+                </span>
+                <span class="text-muted small">{{ resp.createdAt | date : 'MMM d, HH:mm' }}</span>
+              </div>
+              <p class="response-message">{{ resp.message }}</p>
+            </div>
+          }
+        </div>
+
+        <!-- Add response form -->
+        <div class="detail-card">
+          <h3 class="section-heading mb-3">Add Agent Response</h3>
+          @if (responseError) {
+            <div class="alert alert-danger alert-sm mb-2" role="alert">{{ responseError }}</div>
+          }
+          <form #responseForm="ngForm" (ngSubmit)="submitResponse(responseForm)">
+            <div class="mb-2">
+              <label for="responseMessage" class="form-label form-label-sm visually-hidden">
+                Response message
+              </label>
+              <textarea id="responseMessage" name="responseMessage"
+                        class="form-control form-control-sm"
+                        rows="3"
+                        placeholder="Type your response here…"
+                        [(ngModel)]="responseMessage"
+                        required
+                        #msgField="ngModel"
+                        [class.is-invalid]="msgField.invalid && msgField.touched"></textarea>
+              @if (msgField.invalid && msgField.touched) {
+                <div class="invalid-feedback">Response message is required.</div>
+              }
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm"
+                    [disabled]="addingResponse || responseForm.invalid">
+              @if (addingResponse) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Add Response
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Right column: AI actions -->
+      <div class="col-12 col-lg-4">
+        <div class="detail-card">
+          <h3 class="section-heading mb-3">AI Analysis</h3>
+          <p class="text-muted small mb-3">
+            Run the AI workflow to classify, search the knowledge base, and automatically
+            resolve or escalate this ticket.
+          </p>
+
+          @if (analysisResult) {
+            <div class="alert alert-success alert-sm mb-2" role="alert">{{ analysisResult }}</div>
+          }
+          @if (analysisError) {
+            <div class="alert alert-danger alert-sm mb-2" role="alert">{{ analysisError }}</div>
+          }
+
+          <div class="d-grid gap-2">
+            <button class="btn btn-primary" (click)="analyzeTicket()" [disabled]="analyzing">
+              @if (analyzing) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                Analyzing…
+              } @else {
+                🤖 Analyze Ticket
+              }
+            </button>
+            <a [routerLink]="['/workflow', ticketId]" class="btn btn-outline-info">
+              📡 Live Workflow Stream
+            </a>
+          </div>
+
+          <p class="text-muted small mt-3 mb-0">
+            "Analyze Ticket" runs the full workflow and returns the result.
+            "Live Workflow Stream" opens a streaming view with real-time graph updates.
+          </p>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Edit mode -->
+  @if (editing) {
+    <div class="form-card">
+      <h2 class="section-heading mb-3">Edit Ticket</h2>
+
+      @if (saveError) {
+        <div class="alert alert-danger mb-3" role="alert">{{ saveError }}</div>
+      }
+
+      <form #editForm="ngForm" (ngSubmit)="saveEdit(editForm)" novalidate>
+
+        <div class="mb-3">
+          <label for="editCategory" class="form-label">Category</label>
+          <select id="editCategory" name="editCategory" class="form-select"
+                  [(ngModel)]="editModel.categoryId">
+            <option [value]="null">No category</option>
+            @for (c of categories; track c.id) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="editSubject" class="form-label">Subject <span class="text-danger">*</span></label>
+          <input id="editSubject" name="editSubject" type="text" class="form-control"
+                 [(ngModel)]="editModel.subject"
+                 required maxlength="200"
+                 #editSubjectField="ngModel"
+                 [class.is-invalid]="editSubjectField.invalid && editSubjectField.touched" />
+          @if (editSubjectField.invalid && editSubjectField.touched) {
+            <div class="invalid-feedback">Subject is required.</div>
+          }
+        </div>
+
+        <div class="mb-3">
+          <label for="editDescription" class="form-label">Description <span class="text-danger">*</span></label>
+          <textarea id="editDescription" name="editDescription" class="form-control"
+                    rows="4"
+                    [(ngModel)]="editModel.description"
+                    required
+                    #editDescField="ngModel"
+                    [class.is-invalid]="editDescField.invalid && editDescField.touched"></textarea>
+          @if (editDescField.invalid && editDescField.touched) {
+            <div class="invalid-feedback">Description is required.</div>
+          }
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label for="editStatus" class="form-label">Status <span class="text-danger">*</span></label>
+            <select id="editStatus" name="editStatus" class="form-select"
+                    [(ngModel)]="editModel.status" required>
+              @for (s of statusOptions; track s) {
+                <option [value]="s">{{ s }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="editPriority" class="form-label">Priority <span class="text-danger">*</span></label>
+            <select id="editPriority" name="editPriority" class="form-select"
+                    [(ngModel)]="editModel.priority" required>
+              @for (p of priorityOptions; track p) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"
+                  [disabled]="editForm.invalid || saving">
+            @if (saving) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              Saving…
+            } @else {
+              Save Changes
+            }
+          </button>
+          <button type="button" class="btn btn-outline-secondary" (click)="cancelEdit()">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  }
+}

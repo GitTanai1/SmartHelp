@@ -1,0 +1,135 @@
+<div class="page-header mb-4">
+  <h1 class="page-title">Tickets</h1>
+  <a routerLink="/tickets/new" class="btn btn-primary btn-sm">+ New Ticket</a>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-sm-6 col-md-3">
+      <label for="filterStatus" class="form-label form-label-sm">Status</label>
+      <select id="filterStatus" class="form-select form-select-sm"
+              [(ngModel)]="filterStatus" (change)="applyFilters()">
+        <option value="">All statuses</option>
+        @for (s of statusOptions; track s) {
+          <option [value]="s">{{ s }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="col-12 col-sm-6 col-md-3">
+      <label for="filterPriority" class="form-label form-label-sm">Priority</label>
+      <select id="filterPriority" class="form-select form-select-sm"
+              [(ngModel)]="filterPriority" (change)="applyFilters()">
+        <option value="">All priorities</option>
+        @for (p of priorityOptions; track p) {
+          <option [value]="p">{{ p }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="col-12 col-sm-6 col-md-3">
+      <label for="filterCategory" class="form-label form-label-sm">Category</label>
+      <select id="filterCategory" class="form-select form-select-sm"
+              [(ngModel)]="filterCategoryId" (change)="applyFilters()">
+        <option value="">All categories</option>
+        @for (c of categories; track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="col-12 col-sm-6 col-md-3 d-flex align-items-end gap-2">
+      @if (hasActiveFilters) {
+        <button class="btn btn-outline-secondary btn-sm" (click)="clearFilters()">
+          Clear filters
+        </button>
+      }
+      <button class="btn btn-outline-primary btn-sm" (click)="loadTickets()">
+        Refresh
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Loading -->
+@if (loading) {
+  <div class="d-flex align-items-center gap-2 text-secondary py-4">
+    <div class="spinner-border spinner-border-sm" role="status" aria-label="Loading"></div>
+    <span>Loading tickets…</span>
+  </div>
+}
+
+<!-- Error -->
+@if (error) {
+  <div class="alert alert-danger" role="alert">{{ error }}</div>
+}
+
+<!-- Empty -->
+@if (!loading && !error && filteredTickets.length === 0) {
+  <div class="empty-state">
+    @if (hasActiveFilters) {
+      <p class="empty-state-text">No tickets match the current filters.</p>
+      <button class="btn btn-outline-secondary btn-sm" (click)="clearFilters()">Clear filters</button>
+    } @else {
+      <p class="empty-state-text">No tickets yet.</p>
+      <a routerLink="/tickets/new" class="btn btn-primary btn-sm">Create the first ticket</a>
+    }
+  </div>
+}
+
+<!-- Ticket table -->
+@if (!loading && !error && filteredTickets.length > 0) {
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <caption class="visually-hidden">Support tickets</caption>
+      <thead class="table-light">
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Subject</th>
+          <th scope="col">Customer</th>
+          <th scope="col">Category</th>
+          <th scope="col">Status</th>
+          <th scope="col">Priority</th>
+          <th scope="col">Updated</th>
+          <th scope="col" class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (ticket of filteredTickets; track ticket.id) {
+          <tr>
+            <td class="text-muted small">{{ ticket.id }}</td>
+            <td>
+              <a [routerLink]="['/tickets', ticket.id]" class="ticket-subject-link">
+                {{ ticket.subject }}
+              </a>
+            </td>
+            <td class="small">{{ ticket.userName }}</td>
+            <td class="small text-muted">{{ ticket.categoryName ?? '—' }}</td>
+            <td>
+              <span class="badge {{ getStatusClass(ticket.status) }}">{{ ticket.status }}</span>
+            </td>
+            <td>
+              <span [class]="getPriorityClass(ticket.priority)">{{ ticket.priority }}</span>
+            </td>
+            <td class="small text-muted">{{ ticket.updatedAt | date : 'MMM d, HH:mm' }}</td>
+            <td class="text-end">
+              <div class="d-flex gap-1 justify-content-end">
+                <a [routerLink]="['/tickets', ticket.id]"
+                   class="btn btn-outline-secondary btn-sm">View</a>
+                <button class="btn btn-outline-danger btn-sm"
+                        (click)="deleteTicket(ticket.id, $event)"
+                        aria-label="Delete ticket {{ ticket.id }}">
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="text-muted small">
+    Showing {{ filteredTickets.length }} of {{ allTickets.length }} tickets
+  </p>
+}
