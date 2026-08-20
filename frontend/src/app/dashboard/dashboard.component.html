@@ -1,0 +1,154 @@
+<div class="page-header mb-4">
+  <h1 class="page-title">Dashboard</h1>
+  <a routerLink="/tickets/new" class="btn btn-primary btn-sm">New Ticket</a>
+</div>
+
+<!-- Loading state -->
+@if (loading) {
+  <div class="d-flex align-items-center gap-2 text-secondary py-4">
+    <div class="spinner-border spinner-border-sm" role="status" aria-label="Loading"></div>
+    <span>Loading dashboard…</span>
+  </div>
+}
+
+<!-- Error state -->
+@if (error) {
+  <div class="alert alert-danger" role="alert">
+    <strong>Could not load data.</strong> {{ error }}
+  </div>
+}
+
+<!-- Stats row -->
+@if (!loading && !error) {
+  <section class="row g-3 mb-4" aria-label="Ticket statistics">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="stat-card">
+        <p class="stat-label">Total</p>
+        <p class="stat-value">{{ stats.total }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="stat-card stat-card-open">
+        <p class="stat-label">Open</p>
+        <p class="stat-value">{{ stats.open }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="stat-card stat-card-in-progress">
+        <p class="stat-label">In Progress</p>
+        <p class="stat-value">{{ stats.inProgress }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="stat-card stat-card-escalated">
+        <p class="stat-label">Escalated</p>
+        <p class="stat-value">{{ stats.escalated }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="stat-card stat-card-resolved">
+        <p class="stat-label">Resolved</p>
+        <p class="stat-value">{{ stats.resolved }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="stat-card stat-card-closed">
+        <p class="stat-label">Closed</p>
+        <p class="stat-value">{{ stats.closed }}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick links -->
+  <section class="row g-3 mb-4" aria-label="Quick links">
+    <div class="col-12 col-md-4">
+      <div class="quick-link-card">
+        <div class="quick-link-icon">🎫</div>
+        <div>
+          <h3 class="quick-link-title">Tickets</h3>
+          <p class="quick-link-desc">View and manage all support tickets</p>
+          <a routerLink="/tickets" class="btn btn-outline-primary btn-sm">Go to Tickets</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="quick-link-card">
+        <div class="quick-link-icon">📚</div>
+        <div>
+          <h3 class="quick-link-title">Knowledge Base</h3>
+          <p class="quick-link-desc">Browse and edit support articles</p>
+          <a routerLink="/knowledge" class="btn btn-outline-secondary btn-sm">Go to Knowledge</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="quick-link-card">
+        <div class="quick-link-icon">🤖</div>
+        <div>
+          <h3 class="quick-link-title">AI Workflow</h3>
+          <p class="quick-link-desc">Open a ticket and click "Analyze" to see live AI execution</p>
+          <a routerLink="/tickets" class="btn btn-outline-info btn-sm">Find a Ticket</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent tickets table -->
+  <section aria-label="Recent tickets">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="section-heading">Recent Tickets</h2>
+      <a routerLink="/tickets" class="btn btn-link btn-sm p-0">View all →</a>
+    </div>
+
+    @if (recentTickets.length === 0) {
+      <div class="empty-state">
+        <p class="empty-state-text">No tickets yet.</p>
+        <a routerLink="/tickets/new" class="btn btn-primary btn-sm">Create the first ticket</a>
+      </div>
+    } @else {
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Customer</th>
+              <th scope="col">Status</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Created</th>
+              <th scope="col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (ticket of recentTickets; track ticket.id) {
+              <tr>
+                <td class="text-muted small">{{ ticket.id }}</td>
+                <td>
+                  <a [routerLink]="['/tickets', ticket.id]" class="ticket-subject-link">
+                    {{ ticket.subject }}
+                  </a>
+                  @if (ticket.categoryName) {
+                    <span class="badge bg-light text-dark ms-1 small">{{ ticket.categoryName }}</span>
+                  }
+                </td>
+                <td class="small">{{ ticket.userName }}</td>
+                <td>
+                  <span class="badge {{ getStatusClass(ticket.status) }}">{{ ticket.status }}</span>
+                </td>
+                <td>
+                  <span [class]="getPriorityClass(ticket.priority)">{{ ticket.priority }}</span>
+                </td>
+                <td class="small text-muted">{{ ticket.createdAt | date : 'MMM d' }}</td>
+                <td>
+                  <a [routerLink]="['/tickets', ticket.id]" class="btn btn-outline-secondary btn-sm">
+                    View
+                  </a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+}
