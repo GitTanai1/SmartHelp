@@ -1,0 +1,41 @@
+<div class="app-shell">
+  <!-- Navigation bar -->
+  <nav class="navbar bg-white border-bottom" aria-label="Main navigation">
+    <div class="container-fluid px-4 py-2 nav-content">
+      <a class="navbar-brand fw-semibold" routerLink="/dashboard">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        SmartHelp
+      </a>
+
+      <ul class="nav nav-pills gap-1 mb-0">
+        <li class="nav-item">
+          <a class="nav-link"
+             routerLink="/dashboard"
+             routerLinkActive="active">
+            Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link"
+             routerLink="/tickets"
+             routerLinkActive="active"
+             [routerLinkActiveOptions]="{ exact: false }">
+            Tickets
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link"
+             routerLink="/knowledge"
+             routerLinkActive="active">
+            Knowledge
+          </a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Page content -->
+  <main class="container-fluid px-4 py-4">
+    <router-outlet />
+  </main>
+</div>

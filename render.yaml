@@ -1,0 +1,129 @@
+# render.yaml — SmartHelp infrastructure-as-code for Render
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Services defined here:
+#   1. smarthelp-backend — Spring Boot (Java 21) web service (Docker)
+#   2. smarthelp-ai      — Python FastAPI AI service (Docker)
+#
+# Database:
+#   Render only provides managed PostgreSQL, not managed MySQL.
+#   SmartHelp uses MySQL, so the database is hosted externally on a free
+#   MySQL provider. Two good free options:
+#
+#   A) PlanetScale (https://planetscale.com) — free hobby tier, MySQL-compatible
+#      Connection format: jdbc:mysql://<host>/<db>?ssl=true&sslMode=VERIFY_IDENTITY
+#
+#   B) Aiven for MySQL (https://aiven.io) — free trial, MySQL 8
+#      Connection format: jdbc:mysql://<host>:<port>/<db>?ssl=true&requireSSL=true
+#
+#   After creating your free database:
+#   1. Run database/schema.sql and database/seed.sql against it once to initialise it.
+#   2. Set SMARTHELP_DB_URL, SMARTHELP_DB_USERNAME, SMARTHELP_DB_PASSWORD below,
+#      or fill them in via sync:false (Render Dashboard prompt on first deploy).
+#
+# The Angular frontend is deployed separately to Vercel (see frontend/vercel.json).
+#
+# ── How to deploy ────────────────────────────────────────────────────────────
+# 1. Push this repo to GitHub.
+# 2. Provision a free MySQL database on PlanetScale or Aiven and apply the schema.
+# 3. Go to https://dashboard.render.com → New → Blueprint → connect your repo.
+# 4. Render will read this file and prompt for sync:false secrets (DB credentials,
+#    API keys). Fill them in and click Apply.
+# 5. Once both services are healthy, deploy the frontend to Vercel and set
+#    ANGULAR_API_BASE_URL=https://smarthelp-backend.onrender.com/api
+
+services:
+  # ── Spring Boot backend ────────────────────────────────────────────────────
+  - type: web
+    name: smarthelp-backend
+    region: oregon
+    plan: free          # free tier sleeps after 15 min inactivity; upgrade for always-on
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+
+    envVars:
+      # ── Database ──────────────────────────────────────────────────────────
+      # Full JDBC URL to your external MySQL database.
+      # Example (PlanetScale):
+      #   jdbc:mysql://aws.connect.psdb.cloud/smarthelp?ssl=true&sslMode=VERIFY_IDENTITY
+      # Example (Aiven):
+      #   jdbc:mysql://mysql-xxxxxx.aivencloud.com:12345/smarthelp?ssl=true&requireSSL=true
+      - key: SMARTHELP_DB_URL
+        sync: false     # Render will prompt for this value on first deploy
+
+      - key: SMARTHELP_DB_USERNAME
+        sync: false     # Render will prompt for this value on first deploy
+
+      - key: SMARTHELP_DB_PASSWORD
+        sync: false     # Render will prompt for this value on first deploy
+
+      # ── Schema init ───────────────────────────────────────────────────────
+      # Leave as 'never' — apply schema.sql + seed.sql to your external MySQL
+      # database directly (see database/ folder). Spring Boot init is disabled
+      # because the external DB is already initialised before deploy.
+      - key: SPRING_SQL_INIT_MODE
+        value: never
+
+      # ── AI service URL ────────────────────────────────────────────────────
+      # Automatically wired to the deployed smarthelp-ai service URL.
+      - key: SMARTHELP_AI_BASE_URL
+        fromService:
+          name: smarthelp-ai
+          type: web
+          property: host
+
+      # ── CORS ──────────────────────────────────────────────────────────────
+      # Set to your Vercel frontend URL after deploying.
+      # Example: https://smarthelp.vercel.app
+      - key: SMARTHELP_FRONTEND_ORIGIN
+        sync: false     # Render will prompt — enter your Vercel URL
+
+      # Optional extra CORS origins (comma-separated Vercel preview URLs)
+      - key: SMARTHELP_EXTRA_ORIGINS
+        value: ""
+
+      # ── Server ────────────────────────────────────────────────────────────
+      - key: SERVER_PORT
+        value: "8080"
+
+  # ── Python FastAPI AI service ──────────────────────────────────────────────
+  - type: web
+    name: smarthelp-ai
+    region: oregon
+    plan: free
+    runtime: docker
+    dockerfilePath: ./ai-service/Dockerfile
+    dockerContext: ./ai-service
+    healthCheckPath: /health
+
+    envVars:
+      # ── Spring Boot backend URL ───────────────────────────────────────────
+      # The AI service calls back into Spring Boot for all data operations.
+      # Automatically wired to the deployed backend service URL.
+      - key: SPRING_BOOT_BASE_URL
+        fromService:
+          name: smarthelp-backend
+          type: web
+          property: host
+
+      # Free tier Render services can be slow to wake up; give them extra time.
+      - key: SPRING_BOOT_TIMEOUT_SECONDS
+        value: "30"
+
+      # ── LLM credentials ───────────────────────────────────────────────────
+      # Leave LLM_API_KEY empty to run in deterministic (no-LLM) mode.
+      # The workflow still runs using keyword matching + template responses.
+      - key: LLM_API_KEY
+        sync: false     # Render will prompt — paste your API key or leave blank
+
+      - key: LLM_BASE_URL
+        value: ""       # Leave blank for OpenAI; set for Azure/Ollama/etc.
+
+      - key: LLM_MODEL
+        value: gpt-4.1-mini
+
+      # ── Workflow tuning ───────────────────────────────────────────────────
+      - key: SMARTHELP_CONFIDENCE_THRESHOLD
+        value: "0.70"

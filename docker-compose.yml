@@ -1,0 +1,21 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: smarthelp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-smarthelp-root}
+      MYSQL_DATABASE: ${SMARTHELP_DB_NAME:-smarthelp}
+      MYSQL_USER: ${SMARTHELP_DB_USERNAME:-smarthelp}
+      MYSQL_PASSWORD: ${SMARTHELP_DB_PASSWORD:-smarthelp}
+    ports:
+      - "${SMARTHELP_DB_PORT:-3306}:3306"
+    volumes:
+      - smarthelp-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$${MYSQL_USER} -p$${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  smarthelp-mysql-data:

@@ -20,11 +20,12 @@ import {
   UpdateTicketRequest,
   User,
 } from './models';
+import { environment } from '../../environments/environment';
 
-// Base URL for the Spring Boot backend. In production build this would be
-// replaced by an environment file. For development the default points to
-// the local Spring Boot server.
-const API_BASE = 'http://localhost:8080/api';
+// Base URL is read from the Angular environment file so that the production
+// build (ng build --configuration production) automatically points at the
+// deployed Render backend URL without any code changes.
+const API_BASE = environment.apiBaseUrl;
 
 /**
  * ApiService centralises every HTTP call Angular makes to the Spring Boot backend.

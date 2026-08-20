@@ -1,0 +1,47 @@
+// App shell layout
+.app-shell {
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+// Top navigation
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+
+  .nav-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+.navbar-brand {
+  font-size: 1rem;
+  color: #1a1a2e;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  &:hover {
+    color: #0d6efd;
+  }
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #0d6efd;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
