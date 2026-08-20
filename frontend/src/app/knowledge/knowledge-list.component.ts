@@ -1,3 +1,5 @@
+//knowledge-list.component.ts
+
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -122,3 +124,4 @@ export class KnowledgeListComponent implements OnInit {
     return this.categories.find((c) => c.id === id)?.name ?? String(id);
   }
 }
+//--------------------
