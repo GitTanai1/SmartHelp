@@ -1,11 +1,15 @@
 .env
 *.log
 
-docs/
+# Modernization and architecture records are part of the repository contract.
+# Ignore only generated documentation, not the authored docs directory.
+docs/generated/
 
 tools/
 
 backend/target/
+.local-mysql/
+.runtime/
 
 frontend/node_modules/
 frontend/dist/
@@ -15,3 +19,5 @@ frontend/.angular/
 ai-service/.venv/
 ai-service/__pycache__/
 ai-service/.pytest_cache/
+__pycache__/
+*.py[cod]

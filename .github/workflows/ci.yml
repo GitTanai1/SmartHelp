@@ -1,0 +1,94 @@
+name: Continuous integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  api-contract:
+    name: API contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate OpenAPI JSON syntax and version
+        run: >
+          node -e "const fs = require('fs'); const spec = JSON.parse(fs.readFileSync('docs/openapi.json', 'utf8'));
+          const analysis = spec.components?.schemas?.AiAnalysisResult;
+          const ticket = spec.components?.schemas?.CreateTicketRequest;
+          const workflow = spec.components?.schemas?.WorkflowEvent;
+          if (spec.openapi !== '3.1.0' || spec.info?.version !== 'v1' || !spec.paths?.['/tickets']
+            || !spec.paths?.['/tickets/{ticketId}/workflow'] || !spec.paths?.['/tickets/{ticketId}/agent-runs/{runId}/events']
+            || !analysis?.properties?.generatedResponse || analysis.properties.response
+            || !workflow?.properties?.runId || !ticket?.required?.includes('priority')
+            || ticket.properties?.subject?.maxLength !== 200) process.exit(1);"
+
+  backend:
+    name: Backend (Java 21)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: ./mvnw test
+
+  agent-runtime:
+    name: Agent runtime (Python 3.13)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m py_compile checkpoint.py context.py contracts.py main.py graph.py tool_policy.py tools.py prompts.py state.py test_workflow.py
+      - run: python test_workflow.py
+      - run: python ../evals/run_deterministic.py
+
+  frontend:
+    name: Frontend (Node 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

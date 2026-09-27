@@ -17,7 +17,9 @@
 #      Connection format: jdbc:mysql://<host>:<port>/<db>?ssl=true&requireSSL=true
 #
 #   After creating your free database:
-#   1. Run database/schema.sql and database/seed.sql against it once to initialise it.
+#   1. Create an empty SmartHelp database and grant the application user DDL rights.
+#      Flyway runs the versioned migrations at backend startup; do not replay legacy
+#      schema.sql or seed files in a production deployment.
 #   2. Set SMARTHELP_DB_URL, SMARTHELP_DB_USERNAME, SMARTHELP_DB_PASSWORD below,
 #      or fill them in via sync:false (Render Dashboard prompt on first deploy).
 #
@@ -25,12 +27,12 @@
 #
 # ── How to deploy ────────────────────────────────────────────────────────────
 # 1. Push this repo to GitHub.
-# 2. Provision a free MySQL database on PlanetScale or Aiven and apply the schema.
+# 2. Provision an empty MySQL database on PlanetScale or Aiven; Flyway applies migrations.
 # 3. Go to https://dashboard.render.com → New → Blueprint → connect your repo.
 # 4. Render will read this file and prompt for sync:false secrets (DB credentials,
 #    API keys). Fill them in and click Apply.
 # 5. Once both services are healthy, deploy the frontend to Vercel and set
-#    ANGULAR_API_BASE_URL=https://smarthelp-backend.onrender.com/api
+#    ANGULAR_API_BASE_URL=https://smarthelp-backend.onrender.com/api/v1
 
 services:
   # ── Spring Boot backend ────────────────────────────────────────────────────
@@ -41,7 +43,7 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    healthCheckPath: /api/health
+    healthCheckPath: /actuator/health/readiness
 
     envVars:
       # ── Database ──────────────────────────────────────────────────────────
@@ -59,12 +61,11 @@ services:
       - key: SMARTHELP_DB_PASSWORD
         sync: false     # Render will prompt for this value on first deploy
 
-      # ── Schema init ───────────────────────────────────────────────────────
-      # Leave as 'never' — apply schema.sql + seed.sql to your external MySQL
-      # database directly (see database/ folder). Spring Boot init is disabled
-      # because the external DB is already initialised before deploy.
-      - key: SPRING_SQL_INIT_MODE
-        value: never
+      # ── Schema migrations ──────────────────────────────────────────────────
+      # Set this true only when adopting a database that predates Flyway.
+      # New deployments must leave it false so V1 creates the complete schema.
+      - key: SMARTHELP_FLYWAY_BASELINE_ON_MIGRATE
+        value: "false"
 
       # ── AI service URL ────────────────────────────────────────────────────
       # Automatically wired to the deployed smarthelp-ai service URL.
@@ -83,6 +84,23 @@ services:
       # Optional extra CORS origins (comma-separated Vercel preview URLs)
       - key: SMARTHELP_EXTRA_ORIGINS
         value: ""
+
+      # Render deployments must not use the local-open security chain. Supply
+      # an issuer from a standards-compliant OIDC provider; startup fails closed
+      # if this value is omitted or unusable.
+      - key: SMARTHELP_OIDC_ENABLED
+        value: "true"
+
+      - key: SMARTHELP_OIDC_ISSUER_URI
+        sync: false
+
+      # Shared only with smarthelp-ai. Use a generated high-entropy value and
+      # enter the identical secret for both services when Render prompts.
+      - key: SMARTHELP_AGENT_TOKEN_REQUIRED
+        value: "true"
+
+      - key: SMARTHELP_AGENT_SHARED_SECRET
+        sync: false
 
       # ── Server ────────────────────────────────────────────────────────────
       - key: SERVER_PORT
@@ -108,6 +126,14 @@ services:
           type: web
           property: host
 
+      # Must match SMARTHELP_AGENT_SHARED_SECRET configured for the backend.
+      # It prevents direct public invocation of the agent runtime.
+      - key: SMARTHELP_AGENT_TOKEN_REQUIRED
+        value: "true"
+
+      - key: SMARTHELP_AGENT_SHARED_SECRET
+        sync: false
+
       # Free tier Render services can be slow to wake up; give them extra time.
       - key: SPRING_BOOT_TIMEOUT_SECONDS
         value: "30"
@@ -123,6 +149,9 @@ services:
 
       - key: LLM_MODEL
         value: gpt-4.1-mini
+
+      - key: LLM_TIMEOUT_SECONDS
+        value: "30"
 
       # ── Workflow tuning ───────────────────────────────────────────────────
       - key: SMARTHELP_CONFIDENCE_THRESHOLD

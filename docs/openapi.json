@@ -1,0 +1,99 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SmartHelp Core API",
+    "version": "v1",
+    "description": "Maintained contract for the stable SmartHelp v1 ticket and agent-run API. Legacy /api routes are compatibility aliases and are intentionally omitted."
+  },
+  "servers": [{ "url": "http://localhost:8080/api/v1" }],
+  "paths": {
+    "/tickets": {
+      "get": {
+        "summary": "List tickets visible to the current principal",
+        "parameters": [
+          { "$ref": "#/components/parameters/status" },
+          { "$ref": "#/components/parameters/categoryId" },
+          { "$ref": "#/components/parameters/priority" },
+          { "$ref": "#/components/parameters/limit" },
+          { "$ref": "#/components/parameters/offset" }
+        ],
+        "responses": { "200": { "description": "Ticket summaries", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/TicketSummary" } } } } }, "401": { "$ref": "#/components/responses/Problem" } }
+      },
+      "post": {
+        "summary": "Create a support ticket",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } } },
+        "responses": { "201": { "description": "Created ticket", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } } }, "400": { "$ref": "#/components/responses/Problem" }, "403": { "$ref": "#/components/responses/Problem" } }
+      }
+    },
+    "/tickets/{ticketId}": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }],
+      "get": { "summary": "Fetch ticket detail", "responses": { "200": { "description": "Ticket and responses", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TicketDetail" } } } }, "404": { "$ref": "#/components/responses/Problem" } } },
+      "put": { "summary": "Update ticket fields", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTicketRequest" } } } }, "responses": { "200": { "description": "Updated ticket", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } } }, "403": { "$ref": "#/components/responses/Problem" } } },
+      "delete": { "summary": "Delete a ticket", "responses": { "204": { "description": "Deleted" }, "403": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/tickets/{ticketId}/analyze": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }],
+      "post": { "summary": "Run bounded AI analysis", "responses": { "200": { "description": "Final workflow analysis", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiAnalysisResult" } } } }, "400": { "$ref": "#/components/responses/Problem" }, "403": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/tickets/{ticketId}/workflow": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }, { "$ref": "#/components/parameters/workflowRunId" }],
+      "get": { "summary": "Stream a new or interrupted agent workflow", "responses": { "200": { "description": "Workflow server-sent events", "content": { "text/event-stream": { "schema": { "$ref": "#/components/schemas/WorkflowEvent" } } } }, "400": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/tickets/{ticketId}/agent-runs": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }],
+      "get": { "summary": "List persisted agent runs", "responses": { "200": { "description": "Run ledger", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AgentRun" } } } } } } }
+    },
+    "/tickets/{ticketId}/agent-runs/{runId}/cancel": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }, { "$ref": "#/components/parameters/runId" }],
+      "post": { "summary": "Cooperatively cancel a running or approval-waiting run", "responses": { "200": { "description": "Cancelled run", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgentRun" } } } }, "400": { "$ref": "#/components/responses/Problem" }, "404": { "$ref": "#/components/responses/Problem" } } }
+    }
+    ,
+    "/tickets/{ticketId}/agent-runs/{runId}/events": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }, { "$ref": "#/components/parameters/runId" }, { "$ref": "#/components/parameters/afterEventId" }],
+      "get": { "summary": "Read persisted workflow events after a reconnect cursor", "responses": { "200": { "description": "Workflow event history", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AgentRunEvent" } } } } }, "400": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/tickets/{ticketId}/agent-runs/{runId}/approvals": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }, { "$ref": "#/components/parameters/runId" }],
+      "get": { "summary": "List human approval decisions for a run", "responses": { "200": { "description": "Approval records", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AgentApproval" } } } } } } }
+    },
+    "/tickets/{ticketId}/agent-runs/{runId}/approvals/{approvalId}/approve": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }, { "$ref": "#/components/parameters/runId" }, { "$ref": "#/components/parameters/approvalId" }],
+      "post": { "summary": "Approve the Java-owned proposed resolution", "responses": { "200": { "description": "Approved resolution", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgentApproval" } } } }, "400": { "$ref": "#/components/responses/Problem" } } }
+    },
+    "/tickets/{ticketId}/agent-runs/{runId}/approvals/{approvalId}/reject": {
+      "parameters": [{ "$ref": "#/components/parameters/ticketId" }, { "$ref": "#/components/parameters/runId" }, { "$ref": "#/components/parameters/approvalId" }],
+      "post": { "summary": "Reject a proposed resolution", "responses": { "200": { "description": "Rejected resolution", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgentApproval" } } } }, "400": { "$ref": "#/components/responses/Problem" } } }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ticketId": { "name": "ticketId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64" } },
+      "runId": { "name": "runId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+      "workflowRunId": { "name": "runId", "in": "query", "required": false, "schema": { "type": "string", "format": "uuid" } },
+      "afterEventId": { "name": "afterEventId", "in": "query", "required": false, "schema": { "type": "integer", "format": "int64", "minimum": 0, "default": 0 } },
+      "approvalId": { "name": "approvalId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+      "status": { "name": "status", "in": "query", "schema": { "type": "string" } },
+      "categoryId": { "name": "categoryId", "in": "query", "schema": { "type": "integer", "format": "int64" } },
+      "priority": { "name": "priority", "in": "query", "schema": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] } },
+      "limit": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } },
+      "offset": { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+    },
+    "responses": {
+      "Problem": { "description": "RFC 9457 problem detail", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+    },
+    "schemas": {
+      "CreateTicketRequest": { "type": "object", "required": ["userId", "subject", "description", "priority"], "properties": { "userId": { "type": "integer", "format": "int64" }, "subject": { "type": "string", "maxLength": 200 }, "description": { "type": "string" }, "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] }, "categoryId": { "type": ["integer", "null"], "format": "int64" } } },
+      "UpdateTicketRequest": { "type": "object", "properties": { "subject": { "type": "string", "maxLength": 255 }, "description": { "type": "string" }, "status": { "type": "string" }, "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] }, "categoryId": { "type": ["integer", "null"], "format": "int64" } } },
+      "Ticket": { "type": "object", "required": ["id", "userId", "subject", "description", "status", "priority"], "properties": { "id": { "type": "integer", "format": "int64" }, "userId": { "type": "integer", "format": "int64" }, "subject": { "type": "string" }, "description": { "type": "string" }, "status": { "type": "string" }, "priority": { "type": "string" }, "categoryId": { "type": ["integer", "null"], "format": "int64" }, "createdAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" } } },
+      "TicketSummary": { "type": "object", "properties": { "id": { "type": "integer", "format": "int64" }, "subject": { "type": "string" }, "status": { "type": "string" }, "priority": { "type": "string" }, "createdAt": { "type": "string", "format": "date-time" } } },
+      "TicketDetail": { "type": "object", "required": ["ticket", "responses"], "properties": { "ticket": { "$ref": "#/components/schemas/Ticket" }, "responses": { "type": "array", "items": { "type": "object" } } } },
+      "AiAnalysisResult": { "type": "object", "required": ["contractVersion", "ticketId", "priority", "confidence", "generatedResponse", "sensitive", "path"], "properties": { "contractVersion": { "type": "string", "const": "v1" }, "ticketId": { "type": "integer", "format": "int64" }, "category": { "type": ["string", "null"] }, "priority": { "type": "string" }, "confidence": { "type": "number", "minimum": 0, "maximum": 1 }, "generatedResponse": { "type": "string" }, "sensitive": { "type": "boolean" }, "finalStatus": { "type": ["string", "null"], "enum": ["RESOLVED", "ESCALATED", "WAITING_FOR_APPROVAL", null] }, "evidence": { "type": "array", "items": { "$ref": "#/components/schemas/Evidence" } }, "path": { "type": "string" } } },
+      "Evidence": { "type": "object", "required": ["title"], "properties": { "articleId": { "type": ["integer", "null"], "format": "int64" }, "title": { "type": "string" }, "categoryId": { "type": ["integer", "null"], "format": "int64" } } },
+      "AgentRun": { "type": "object", "required": ["id", "ticketId", "status", "requestedBy", "createdAt", "updatedAt"], "properties": { "id": { "type": "string", "format": "uuid" }, "ticketId": { "type": "integer", "format": "int64" }, "status": { "type": "string", "enum": ["RUNNING", "WAITING_FOR_APPROVAL", "COMPLETED", "FAILED", "CANCELLED"] }, "requestedBy": { "type": "string" }, "requestId": { "type": ["string", "null"], "format": "uuid" }, "createdAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" }, "completedAt": { "type": ["string", "null"], "format": "date-time" }, "errorMessage": { "type": ["string", "null"] } } },
+      "WorkflowEvent": { "type": "object", "required": ["contractVersion", "ticketId", "node", "status", "state", "message"], "properties": { "contractVersion": { "type": "string", "const": "v1" }, "ticketId": { "type": "integer", "format": "int64" }, "runId": { "type": ["string", "null"], "format": "uuid" }, "node": { "type": "string" }, "status": { "type": "string", "enum": ["PENDING", "RUNNING", "COMPLETED", "SKIPPED", "FAILED"] }, "state": { "type": "object" }, "message": { "type": "string" } } },
+      "AgentRunEvent": { "type": "object", "required": ["id", "runId", "node", "status", "payload", "occurredAt"], "properties": { "id": { "type": "integer", "format": "int64" }, "runId": { "type": "string", "format": "uuid" }, "node": { "type": "string" }, "status": { "type": "string" }, "payload": { "type": "string" }, "occurredAt": { "type": "string", "format": "date-time" } } },
+      "AgentApproval": { "type": "object", "required": ["id", "runId", "ticketId", "actionType", "status", "requestedAt"], "properties": { "id": { "type": "string", "format": "uuid" }, "runId": { "type": "string", "format": "uuid" }, "ticketId": { "type": "integer", "format": "int64" }, "actionType": { "type": "string", "const": "TICKET_RESOLUTION" }, "proposedMessage": { "type": "string" }, "proposedPriority": { "type": ["string", "null"] }, "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] }, "requestedAt": { "type": "string", "format": "date-time" }, "decidedAt": { "type": ["string", "null"], "format": "date-time" }, "decidedBy": { "type": ["string", "null"] }, "decisionNote": { "type": ["string", "null"] } } },
+      "Problem": { "type": "object", "required": ["type", "title", "status", "detail", "instance"], "properties": { "type": { "type": "string", "format": "uri-reference" }, "title": { "type": "string" }, "status": { "type": "integer" }, "detail": { "type": "string" }, "instance": { "type": "string", "format": "uri-reference" }, "requestId": { "type": "string", "format": "uuid" } } }
+    }
+  }
+}

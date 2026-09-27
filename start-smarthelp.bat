@@ -23,35 +23,12 @@ if %ERRORLEVEL% EQU 0 (
 echo.
 where mysql >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-    echo [2/3] Checking MySQL access and loading database...
-
-    mysql -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        echo Using local MySQL root account with no password.
-        mysql -h 127.0.0.1 -P 3306 -u root < "%ROOT%database\schema.sql"
-        if %ERRORLEVEL% EQU 0 (
-            mysql -h 127.0.0.1 -P 3306 -u root < "%ROOT%database\seed.sql"
-        )
-    ) else (
-        mysql -h 127.0.0.1 -P 3306 -u smarthelp -psmarthelp -e "SELECT 1;" >nul 2>&1
-        if %ERRORLEVEL% EQU 0 (
-            echo Using smarthelp user credentials.
-            mysql -h 127.0.0.1 -P 3306 -u smarthelp -psmarthelp < "%ROOT%database\schema.sql"
-            if %ERRORLEVEL% EQU 0 (
-                mysql -h 127.0.0.1 -P 3306 -u smarthelp -psmarthelp < "%ROOT%database\seed.sql"
-            )
-        ) else (
-            echo MySQL is not ready or the root password is not blank.
-            echo Open MySQL and run these commands manually:
-            echo   mysql -h 127.0.0.1 -P 3306 -u root
-            echo   source database/dev-user.sql
-            echo   source database/schema.sql
-            echo   source database/seed.sql
-        )
-    )
+echo [2/3] Database schema is managed by Flyway at backend startup.
+echo Legacy database/schema.sql and seed files are not replayed by this launcher.
+echo Ensure MySQL is running; Flyway will create or migrate a fresh SmartHelp database.
 ) else (
     echo MySQL client not found. If using Docker, the database may already be running.
-    echo If using a local MySQL install, make sure you load the SQL files manually.
+    echo Flyway will initialize or migrate the configured database when the backend starts.
 )
 
 echo.
@@ -62,7 +39,7 @@ if defined JAVA_HOME (
 if not defined JDK_PATH (
     for %%D in ("C:\Program Files\Eclipse Adoptium" "C:\Program Files\Microsoft" "C:\Program Files\Java") do (
         if exist "%%~D" (
-            for /d %%J in ("%%~D\jdk-*" "%%~D\*jdk*" "%%~D\Java\jdk-*") do (
+            for /d %%J in ("%%~D\jdk-21*" "%%~D\*jdk-21*" "%%~D\Java\jdk-21*") do (
                 if exist "%%~J\bin\java.exe" (
                     set "JDK_PATH=%%~J"
                     goto :found_jdk
