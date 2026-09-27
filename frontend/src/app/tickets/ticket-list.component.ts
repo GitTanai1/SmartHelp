@@ -8,8 +8,8 @@ import { Category, TicketPriority, TicketStatus, TicketSummary } from '../core/m
 
 /**
  * TicketListComponent shows all tickets with optional filtering by status,
- * priority, and category. Filters are applied client-side from the full list
- * for simplicity; the API also supports server-side filtering via query params.
+ * priority, and category. Filters and pagination are applied server-side, so a
+ * large ticket table is never loaded into the browser merely to filter it.
  */
 @Component({
   selector: 'app-ticket-list',
@@ -26,6 +26,8 @@ export class TicketListComponent implements OnInit {
   filterStatus: string = '';
   filterPriority: string = '';
   filterCategoryId: string = '';
+  readonly pageSize = 25;
+  offset = 0;
 
   loading = true;
   error: string | null = null;
@@ -43,10 +45,16 @@ export class TicketListComponent implements OnInit {
   loadTickets(): void {
     this.loading = true;
     this.error = null;
-    this.api.getTickets().subscribe({
+    this.api.getTickets({
+      status: this.filterStatus as TicketStatus || undefined,
+      priority: this.filterPriority as TicketPriority || undefined,
+      categoryId: this.filterCategoryId ? Number(this.filterCategoryId) : undefined,
+      limit: this.pageSize,
+      offset: this.offset,
+    }).subscribe({
       next: (tickets) => {
         this.allTickets = tickets;
-        this.applyFilters();
+        this.filteredTickets = tickets;
         this.loading = false;
       },
       error: () => {
@@ -56,20 +64,33 @@ export class TicketListComponent implements OnInit {
     });
   }
 
-  applyFilters(): void {
-    this.filteredTickets = this.allTickets.filter((t) => {
-      if (this.filterStatus && t.status !== this.filterStatus) return false;
-      if (this.filterPriority && t.priority !== this.filterPriority) return false;
-      if (this.filterCategoryId && String(t.categoryId) !== this.filterCategoryId) return false;
-      return true;
-    });
+  onFiltersChanged(): void {
+    this.offset = 0;
+    this.loadTickets();
   }
 
   clearFilters(): void {
     this.filterStatus = '';
     this.filterPriority = '';
     this.filterCategoryId = '';
-    this.applyFilters();
+    this.offset = 0;
+    this.loadTickets();
+  }
+
+  previousPage(): void {
+    if (this.offset === 0) return;
+    this.offset = Math.max(0, this.offset - this.pageSize);
+    this.loadTickets();
+  }
+
+  nextPage(): void {
+    if (!this.hasNextPage) return;
+    this.offset += this.pageSize;
+    this.loadTickets();
+  }
+
+  get hasNextPage(): boolean {
+    return this.allTickets.length === this.pageSize;
   }
 
   get hasActiveFilters(): boolean {
@@ -102,7 +123,7 @@ export class TicketListComponent implements OnInit {
     this.api.deleteTicket(id).subscribe({
       next: () => {
         this.allTickets = this.allTickets.filter((t) => t.id !== id);
-        this.applyFilters();
+        this.filteredTickets = this.allTickets;
       },
       error: () => alert('Failed to delete ticket.'),
     });

@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { ApiService } from '../core/api.service';
-import { NodeStatus, WorkflowEvent, WorkflowNode, WorkflowState } from '../core/models';
+import { AgentRun, AgentRunEvent, NodeStatus, WorkflowEvent, WorkflowNode, WorkflowState } from '../core/models';
 
 /** Describes one node as rendered in the SVG graph. */
 interface GraphNode {
@@ -63,6 +63,7 @@ interface GraphEdge {
 })
 export class WorkflowGraphComponent implements OnInit, OnDestroy {
   ticketId!: number;
+  runId: string | null = null;
 
   // Graph nodes laid out for the SVG viewport (width=560, flexible height)
   nodes: GraphNode[] = [
@@ -112,10 +113,19 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
       message: '',
     },
     {
+      id: 'VERIFY_RESPONSE',
+      label: 'Verify Response',
+      description: 'Checks that the proposed response has retrieved evidence before it can be approved.',
+      x: 150, y: 520,
+      status: 'PENDING',
+      lastState: null,
+      message: '',
+    },
+    {
       id: 'ESCALATE',
       label: 'Escalate',
       description: 'Sets the ticket status to ESCALATED and adds an AI note explaining why.',
-      x: 410, y: 490,
+      x: 410, y: 590,
       status: 'PENDING',
       lastState: null,
       message: '',
@@ -123,8 +133,8 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
     {
       id: 'RESOLVE',
       label: 'Resolve',
-      description: 'Posts the AI response and sets the ticket status to RESOLVED.',
-      x: 150, y: 520,
+      description: 'Creates a resolution proposal that requires operator approval.',
+      x: 150, y: 610,
       status: 'PENDING',
       lastState: null,
       message: '',
@@ -142,22 +152,29 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
     { from: 'GENERATE_RESPONSE', to: 'CHECK_SENSITIVITY', taken: false, conditional: false },
     // Conditional: sensitive → ESCALATE
     { from: 'CHECK_SENSITIVITY', to: 'ESCALATE',          label: 'Sensitive',       taken: false, conditional: true },
-    // Conditional: not sensitive → RESOLVE
-    { from: 'CHECK_SENSITIVITY', to: 'RESOLVE',           label: 'Not sensitive',   taken: false, conditional: true },
+    { from: 'CHECK_SENSITIVITY', to: 'VERIFY_RESPONSE',   label: 'Not sensitive',   taken: false, conditional: true },
+    { from: 'VERIFY_RESPONSE', to: 'ESCALATE',            label: 'Verification failed', taken: false, conditional: true },
+    { from: 'VERIFY_RESPONSE', to: 'RESOLVE',             label: 'Verified',        taken: false, conditional: true },
   ];
 
   selectedNode: GraphNode | null = null;
-  streamStatus: 'idle' | 'connecting' | 'running' | 'complete' | 'error' = 'idle';
+  streamStatus: 'idle' | 'connecting' | 'running' | 'waiting_approval' | 'complete' | 'error' = 'idle';
   streamError: string | null = null;
   finalStatus: string | null = null;
   executionPath: WorkflowNode[] = [];
+  liveMessage = 'Preparing the workflow.';
 
   private eventSource: EventSource | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 3;
+  private livePollTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPersistedEventId = 0;
 
   // Radius and width constants for SVG layout
   readonly NODE_RADIUS = 36;
   readonly SVG_WIDTH = 560;
-  readonly SVG_HEIGHT = 600;
+  readonly SVG_HEIGHT = 690;
 
   constructor(
     private route: ActivatedRoute,
@@ -166,26 +183,35 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.ticketId = Number(this.route.snapshot.paramMap.get('ticketId'));
+    this.runId = this.route.snapshot.queryParamMap.get('runId');
     this.startStream();
   }
 
   ngOnDestroy(): void {
     this.closeStream();
+    this.stopLivePolling();
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
   }
 
-  startStream(): void {
-    this.resetGraph();
+  startStream(preserveGraph = false): void {
+    if (!preserveGraph) {
+      this.resetGraph();
+      this.reconnectAttempts = 0;
+    }
     this.streamStatus = 'connecting';
     this.streamError = null;
     this.finalStatus = null;
-    this.executionPath = [];
+    if (!preserveGraph) this.executionPath = [];
 
     this.closeStream();
+    this.stopLivePolling();
 
-    this.eventSource = this.api.openWorkflowStream(this.ticketId);
+    this.eventSource = this.api.openWorkflowStream(this.ticketId, this.runId ?? undefined);
 
     this.eventSource.onopen = () => {
       this.streamStatus = 'running';
+      this.liveMessage = 'Workflow connected. Waiting for the first agent step…';
+      this.discoverRunAndStartPolling();
     };
 
     this.eventSource.onmessage = (event) => {
@@ -198,39 +224,50 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
     };
 
     this.eventSource.onerror = () => {
-      // EventSource closes automatically after the stream ends.
-      // If the status is still running, it's a real error.
       if (this.streamStatus === 'running' || this.streamStatus === 'connecting') {
+        if (this.runId && this.reconnectAttempts < this.maxReconnectAttempts) {
+          const delayMs = 250 * 2 ** this.reconnectAttempts;
+          this.reconnectAttempts += 1;
+          this.closeStream();
+          this.reconnectTimer = setTimeout(() => this.startStream(true), delayMs);
+          return;
+        }
         this.streamStatus = 'error';
         this.streamError =
           'Could not connect to the workflow stream. ' +
           'Ensure the backend is running on port 8080 and the AI service on port 8000.';
       }
       this.closeStream();
+      this.stopLivePolling();
     };
   }
 
   private handleEvent(event: WorkflowEvent): void {
+    if (event.runId) this.runId = event.runId;
     const node = this.findNode(event.node as WorkflowNode);
     if (!node) return;
 
     node.status = event.status;
     node.message = event.message;
+    this.liveMessage = `${node.label}: ${event.message || event.status.toLowerCase()}`;
     if (event.state) {
       node.lastState = event.state;
     }
 
     if (event.status === 'COMPLETED') {
-      this.executionPath.push(event.node as WorkflowNode);
+      if (!this.executionPath.includes(event.node as WorkflowNode)) {
+        this.executionPath.push(event.node as WorkflowNode);
+      }
       this.updateTakenEdges(event.node as WorkflowNode, event.state);
 
       // Check for terminal nodes
       if (event.node === 'RESOLVE' || event.node === 'ESCALATE') {
         this.finalStatus = event.state?.finalStatus ?? event.node;
-        this.streamStatus = 'complete';
+        this.streamStatus = this.finalStatus === 'WAITING_FOR_APPROVAL' ? 'waiting_approval' : 'complete';
         // Mark any unvisited nodes as SKIPPED
         this.markSkippedNodes();
         this.closeStream();
+        this.stopLivePolling();
       }
     }
 
@@ -240,7 +277,46 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
       this.streamError = event.message;
       this.markSkippedNodes();
       this.closeStream();
+      this.stopLivePolling();
     }
+
+    // The current node is always visible without requiring a graph click.
+    if (event.status === 'RUNNING' || event.status === 'COMPLETED' || event.status === 'FAILED') {
+      this.selectedNode = node;
+    }
+  }
+
+  private discoverRunAndStartPolling(): void {
+    this.api.getAgentRuns(this.ticketId).subscribe({
+      next: (runs) => {
+        const run = this.runId ? runs.find((candidate) => candidate.id === this.runId) : this.findActiveRun(runs);
+        if (!run) return;
+        this.runId = run.id;
+        this.startLivePolling();
+      },
+    });
+  }
+
+  private findActiveRun(runs: AgentRun[]): AgentRun | undefined {
+    return runs.find((run) => run.status === 'RUNNING') ?? runs[0];
+  }
+
+  private startLivePolling(): void {
+    if (this.livePollTimer !== null) return;
+    this.pollPersistedEvents();
+    this.livePollTimer = setInterval(() => this.pollPersistedEvents(), 1000);
+  }
+
+  private pollPersistedEvents(): void {
+    if (!this.runId || ['complete', 'waiting_approval', 'error'].includes(this.streamStatus)) return;
+    this.api.getAgentRunEvents(this.ticketId, this.runId, this.lastPersistedEventId).subscribe({
+      next: (events) => events.forEach((event) => this.applyPersistedEvent(event)),
+    });
+  }
+
+  private applyPersistedEvent(event: AgentRunEvent): void {
+    this.lastPersistedEventId = Math.max(this.lastPersistedEventId, event.id);
+    try { this.handleEvent(JSON.parse(event.payload) as WorkflowEvent); } catch { /* ignore malformed historical event */ }
   }
 
   private updateTakenEdges(completedNode: WorkflowNode, state: WorkflowState | undefined): void {
@@ -251,7 +327,10 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
       this.setEdgeTaken('CHECK_CONFIDENCE', 'ESCALATE', !highConf);
     } else if (completedNode === 'CHECK_SENSITIVITY' && state) {
       this.setEdgeTaken('CHECK_SENSITIVITY', 'ESCALATE', state.sensitive);
-      this.setEdgeTaken('CHECK_SENSITIVITY', 'RESOLVE', !state.sensitive);
+      this.setEdgeTaken('CHECK_SENSITIVITY', 'VERIFY_RESPONSE', !state.sensitive);
+    } else if (completedNode === 'VERIFY_RESPONSE' && state) {
+      this.setEdgeTaken('VERIFY_RESPONSE', 'ESCALATE', !!state.verificationFailed);
+      this.setEdgeTaken('VERIFY_RESPONSE', 'RESOLVE', !state.verificationFailed);
     } else {
       // Non-conditional edges: mark the edge FROM this node as taken
       this.edges
@@ -283,6 +362,8 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
       edge.taken = false;
     }
     this.selectedNode = null;
+    this.liveMessage = 'Preparing the workflow.';
+    this.lastPersistedEventId = 0;
   }
 
   private closeStream(): void {
@@ -290,6 +371,11 @@ export class WorkflowGraphComponent implements OnInit, OnDestroy {
       this.eventSource.close();
       this.eventSource = null;
     }
+  }
+
+  private stopLivePolling(): void {
+    if (this.livePollTimer !== null) clearInterval(this.livePollTimer);
+    this.livePollTimer = null;
   }
 
   selectNode(node: GraphNode): void {

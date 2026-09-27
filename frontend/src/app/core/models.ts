@@ -88,6 +88,12 @@ export interface CreateUserRequest {
   role: 'CUSTOMER' | 'AGENT';
 }
 
+export interface UpdateUserRequest extends CreateUserRequest {}
+
+export interface CategoryRequest {
+  name: string;
+}
+
 export interface CreateKnowledgeRequest {
   categoryId: number;
   title: string;
@@ -107,6 +113,7 @@ export interface CreateTicketResponseRequest {
 
 // AI workflow types
 export interface AiAnalysisResult {
+  contractVersion: 'v1';
   ticketId: number;
   category: string | null;
   priority: string;
@@ -114,12 +121,56 @@ export interface AiAnalysisResult {
   generatedResponse: string;
   sensitive: boolean;
   finalStatus: string | null;
+  evidence: Evidence[];
   path: string;
+}
+
+export interface Evidence {
+  articleId: number;
+  title: string;
+  categoryId: number | null;
+}
+
+export interface AgentRun {
+  id: string;
+  ticketId: number;
+  status: 'RUNNING' | 'WAITING_FOR_APPROVAL' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  requestedBy: string;
+  requestId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  errorMessage: string | null;
+}
+
+export interface AgentRunEvent {
+  id: number;
+  runId: string;
+  node: string;
+  status: string;
+  payload: string;
+  occurredAt: string;
+}
+
+export interface AgentApproval {
+  id: string;
+  runId: string;
+  ticketId: number;
+  actionType: 'TICKET_RESOLUTION';
+  proposedMessage: string;
+  proposedPriority: TicketPriority | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
 }
 
 // SSE workflow event emitted by Spring Boot /api/tickets/{id}/workflow
 export interface WorkflowEvent {
+  contractVersion: 'v1';
   ticketId: number;
+  runId: string | null;
   node: WorkflowNode;
   status: NodeStatus;
   state: WorkflowState;
@@ -132,6 +183,7 @@ export type WorkflowNode =
   | 'CHECK_CONFIDENCE'
   | 'GENERATE_RESPONSE'
   | 'CHECK_SENSITIVITY'
+  | 'VERIFY_RESPONSE'
   | 'ESCALATE'
   | 'RESOLVE';
 
@@ -144,7 +196,9 @@ export interface WorkflowState {
   sensitive: boolean;
   finalStatus: string | null;
   knowledgeCount: number;
+  evidence: Evidence[];
   generatedResponse: string;
+  verificationFailed?: boolean;
   path: string[];
 }
 
@@ -160,9 +214,14 @@ export interface DashboardStats {
 
 // Generic API error from the backend
 export interface ApiError {
+  type: string;
+  title: string;
+  detail: string;
+  instance: string;
   status: number;
   error: string;
   message: string;
   path: string;
+  requestId: string | null;
   timestamp: string;
 }

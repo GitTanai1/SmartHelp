@@ -129,3 +129,16 @@
     flex-shrink: 0;
   }
 }
+
+/* The graph is a live control surface, not a white card pasted over the dark app. */
+.workflow-layout { gap: 1rem; }
+.graph-container { background:#171614; border:1px solid rgba(247,242,232,.16); padding:1.25rem; }
+.workflow-svg { width:100%; height:auto; max-width:680px; }
+.detail-panel { background:#171614; border:1px solid rgba(247,242,232,.16); border-radius:0; min-height:340px; }
+.panel-heading { color:#f7f2e8; font-size:1.15rem; font-weight:650; }
+.detail-row { border-bottom-color:rgba(247,242,232,.1); }
+.state-snapshot, .execution-path { background:#11110f; border-radius:0; }
+.response-preview { background:#20271c; border-left-color:#adcf99; }
+.live-status { display:flex; align-items:center; gap:.9rem; padding:1rem 1.1rem; margin-bottom:1rem; background:#21170f; border:1px solid rgba(217,120,67,.45); color:#f7f2e8; }
+.live-status > div { display:grid; gap:.28rem; flex:1; }.live-status strong { font-size:.88rem; font-weight:600; }.live-run { font-family:"DM Mono",monospace; color:#c8b9a4; font-size:.72rem; }.live-dot { width:9px; height:9px; background:#77726a; border-radius:50%; }.live-dot.is-active { background:#d97843; box-shadow:0 0 0 5px rgba(217,120,67,.15); animation:live-pulse 1.35s infinite; }
+@keyframes live-pulse { 50% { box-shadow:0 0 0 9px rgba(217,120,67,0); } }

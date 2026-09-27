@@ -76,3 +76,45 @@
   font-size: 0.85rem;
   padding: 0.5rem 0.75rem;
 }
+
+.run-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.run-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+  padding: 0.45rem;
+  text-align: left;
+
+  &.selected {
+    border-color: #0d6efd;
+    background: #eff6ff;
+  }
+}
+
+.run-event {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+
+  summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+
+  pre {
+    max-height: 12rem;
+    overflow: auto;
+    margin: 0.5rem 0 0;
+    font-size: 0.7rem;
+    white-space: pre-wrap;
+  }
+}

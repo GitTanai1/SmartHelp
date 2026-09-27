@@ -5,6 +5,9 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ApiService } from '../core/api.service';
 import {
+  AgentRun,
+  AgentRunEvent,
+  AgentApproval,
   Category,
   CreateTicketResponseRequest,
   TicketDetail,
@@ -58,6 +61,15 @@ export class TicketDetailComponent implements OnInit {
   analysisResult: string | null = null;
   analysisError: string | null = null;
 
+  agentRuns: AgentRun[] = [];
+  selectedRun: AgentRun | null = null;
+  selectedRunEvents: AgentRunEvent[] = [];
+  selectedRunApprovals: AgentApproval[] = [];
+  loadingRuns = false;
+  cancellingRun = false;
+  decidingApprovalId: string | null = null;
+  runsError: string | null = null;
+
   loading = true;
   loadError: string | null = null;
 
@@ -74,6 +86,84 @@ export class TicketDetailComponent implements OnInit {
     this.ticketId = Number(this.route.snapshot.paramMap.get('id'));
     this.api.getCategories().subscribe({ next: (cats) => (this.categories = cats) });
     this.loadTicket();
+    this.loadAgentRuns();
+  }
+
+  loadAgentRuns(): void {
+    this.loadingRuns = true;
+    this.runsError = null;
+    this.api.getAgentRuns(this.ticketId).subscribe({
+      next: (runs) => {
+        this.agentRuns = runs;
+        this.loadingRuns = false;
+      },
+      error: () => {
+        this.runsError = 'Run history is unavailable.';
+        this.loadingRuns = false;
+      },
+    });
+  }
+
+  selectRun(run: AgentRun): void {
+    this.selectedRun = run;
+    this.selectedRunEvents = [];
+    this.selectedRunApprovals = [];
+    this.api.getAgentRunEvents(this.ticketId, run.id).subscribe({
+      next: (events) => (this.selectedRunEvents = events),
+      error: () => (this.runsError = 'Could not load events for the selected run.'),
+    });
+    this.api.getAgentApprovals(this.ticketId, run.id).subscribe({
+      next: (approvals) => (this.selectedRunApprovals = approvals),
+      error: () => (this.runsError = 'Could not load approvals for the selected run.'),
+    });
+  }
+
+  loadNewerRunEvents(): void {
+    if (!this.selectedRun) return;
+    const afterEventId = this.selectedRunEvents.at(-1)?.id ?? 0;
+    this.api.getAgentRunEvents(this.ticketId, this.selectedRun.id, afterEventId).subscribe({
+      next: (events) => {
+        const seen = new Set(this.selectedRunEvents.map((event) => event.id));
+        this.selectedRunEvents = [...this.selectedRunEvents, ...events.filter((event) => !seen.has(event.id))];
+      },
+      error: () => (this.runsError = 'Could not load newer events for the selected run.'),
+    });
+  }
+
+  cancelSelectedRun(): void {
+    if (!this.selectedRun || !['RUNNING', 'WAITING_FOR_APPROVAL'].includes(this.selectedRun.status)) return;
+    this.cancellingRun = true;
+    this.runsError = null;
+    this.api.cancelAgentRun(this.ticketId, this.selectedRun.id).subscribe({
+      next: (run) => {
+        this.cancellingRun = false;
+        this.selectedRun = run;
+        this.loadAgentRuns();
+        this.selectRun(run);
+      },
+      error: (err) => {
+        this.cancellingRun = false;
+        this.runsError = err?.error?.message ?? 'Could not cancel the selected run.';
+      },
+    });
+  }
+
+  decideApproval(approval: AgentApproval, decision: 'approve' | 'reject'): void {
+    if (!this.selectedRun || approval.status !== 'PENDING') return;
+    this.decidingApprovalId = approval.id;
+    this.runsError = null;
+    this.api.decideAgentApproval(this.ticketId, this.selectedRun.id, approval.id, decision).subscribe({
+      next: () => {
+        this.decidingApprovalId = null;
+        this.loadTicket();
+        this.loadAgentRuns();
+        this.selectRun(this.selectedRun!);
+      },
+      error: (err) => {
+        this.decidingApprovalId = null;
+        this.runsError = err?.error?.message ?? 'Could not record the approval decision.';
+      },
+    });
   }
 
   loadTicket(): void {
@@ -158,6 +248,7 @@ export class TicketDetailComponent implements OnInit {
         this.analyzing = false;
         this.analysisResult = `AI analysis complete. Final status: ${result.finalStatus}. Confidence: ${(result.confidence * 100).toFixed(0)}%. Path: ${result.path}`;
         this.loadTicket(); // Reload so any AI response/status changes appear
+        this.loadAgentRuns();
       },
       error: (err) => {
         this.analyzing = false;
@@ -184,6 +275,16 @@ export class TicketDetailComponent implements OnInit {
       LOW: 'bg-success text-white',
     };
     return map[priority] ?? 'bg-secondary text-white';
+  }
+
+  runDuration(run: AgentRun): string {
+    const startedAt = new Date(run.createdAt).getTime();
+    const endedAt = new Date(run.completedAt ?? new Date().toISOString()).getTime();
+    if (Number.isNaN(startedAt) || Number.isNaN(endedAt) || endedAt < startedAt) return '—';
+
+    const elapsedSeconds = Math.floor((endedAt - startedAt) / 1000);
+    if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+    return `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`;
   }
 
   get ticket(): TicketSummary | undefined {

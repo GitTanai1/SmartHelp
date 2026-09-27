@@ -1,10 +1,9 @@
 <div class="app-shell">
-  <!-- Navigation bar -->
-  <nav class="navbar bg-white border-bottom" aria-label="Main navigation">
-    <div class="container-fluid px-4 py-2 nav-content">
-      <a class="navbar-brand fw-semibold" routerLink="/dashboard">
-        <span class="brand-mark" aria-hidden="true">S</span>
-        SmartHelp
+  <nav class="navbar" aria-label="Main navigation">
+    <div class="container-fluid px-4 nav-content">
+      <a class="navbar-brand" routerLink="/dashboard" aria-label="SmartHelp home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>SMARTHELP</span>
       </a>
 
       <ul class="nav nav-pills gap-1 mb-0">
@@ -30,12 +29,20 @@
             Knowledge
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link"
+             routerLink="/operations"
+             routerLinkActive="active">
+            Operations
+          </a>
+        </li>
       </ul>
+      <a routerLink="/tickets/new" class="nav-cta">Start a ticket <span aria-hidden="true">↗</span></a>
     </div>
   </nav>
 
   <!-- Page content -->
-  <main class="container-fluid px-4 py-4">
+  <main class="container-fluid px-4 py-5">
     <router-outlet />
   </main>
 </div>

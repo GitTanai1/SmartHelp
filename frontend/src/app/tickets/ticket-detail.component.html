@@ -121,6 +121,93 @@
             </button>
           </form>
         </div>
+
+        <div class="detail-card mt-3">
+          <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+            <h3 class="section-heading">Agent Run Explorer</h3>
+            <button class="btn btn-outline-secondary btn-sm" (click)="loadAgentRuns()" [disabled]="loadingRuns">
+              Refresh
+            </button>
+          </div>
+          @if (runsError) {
+            <p class="text-danger small">{{ runsError }}</p>
+          }
+          @if (loadingRuns) {
+            <p class="text-muted small">Loading run history…</p>
+          } @else if (agentRuns.length === 0) {
+            <p class="text-muted small">No persisted streamed runs yet.</p>
+          } @else {
+            <div class="run-list">
+              @for (run of agentRuns; track run.id) {
+                <button class="run-item" [class.selected]="selectedRun?.id === run.id" (click)="selectRun(run)">
+                  <span class="badge" [class.bg-success]="run.status === 'COMPLETED'"
+                        [class.bg-danger]="run.status === 'FAILED'"
+                        [class.bg-primary]="run.status === 'RUNNING'"
+                        [class.bg-warning]="run.status === 'WAITING_FOR_APPROVAL'">{{ run.status }}</span>
+                  <span class="small text-truncate">{{ run.requestedBy }}</span>
+                  <span class="small text-muted">{{ run.createdAt | date : 'MMM d, HH:mm' }}</span>
+                </button>
+              }
+            </div>
+            @if (selectedRun) {
+              <div class="run-events mt-3">
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                  <p class="small fw-semibold mb-0">{{ selectedRunEvents.length }} event(s)</p>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="loadNewerRunEvents()">
+                    Load newer events
+                  </button>
+                  @if (selectedRun.status === 'FAILED') {
+                    <a class="btn btn-outline-primary btn-sm" [routerLink]="['/workflow', ticketId]"
+                       [queryParams]="{ runId: selectedRun.id }">Resume from checkpoint</a>
+                  }
+                  @if (selectedRun.status === 'RUNNING' || selectedRun.status === 'WAITING_FOR_APPROVAL') {
+                    <button class="btn btn-outline-danger btn-sm" (click)="cancelSelectedRun()" [disabled]="cancellingRun">
+                      {{ cancellingRun ? 'Cancelling…' : 'Cancel run' }}
+                    </button>
+                  }
+                </div>
+                <dl class="row small text-muted mb-3">
+                  <dt class="col-sm-3">Run ID</dt>
+                  <dd class="col-sm-9 text-break">{{ selectedRun.id }}</dd>
+                  <dt class="col-sm-3">Request ID</dt>
+                  <dd class="col-sm-9 text-break">{{ selectedRun.requestId ?? 'Not available' }}</dd>
+                  <dt class="col-sm-3">Duration</dt>
+                  <dd class="col-sm-9">{{ runDuration(selectedRun) }}</dd>
+                  @if (selectedRun.errorMessage) {
+                    <dt class="col-sm-3">Error</dt>
+                    <dd class="col-sm-9 text-danger text-break">{{ selectedRun.errorMessage }}</dd>
+                  }
+                </dl>
+                @for (approval of selectedRunApprovals; track approval.id) {
+                  <div class="border rounded p-2 mb-2 small">
+                    <div class="d-flex justify-content-between gap-2">
+                      <strong>{{ approval.actionType }}</strong>
+                      <span class="badge" [class.bg-warning]="approval.status === 'PENDING'"
+                            [class.bg-success]="approval.status === 'APPROVED'"
+                            [class.bg-secondary]="approval.status === 'REJECTED'">{{ approval.status }}</span>
+                    </div>
+                    <p class="mb-1 mt-2">{{ approval.proposedMessage }}</p>
+                    <p class="text-muted mb-2">Priority: {{ approval.proposedPriority ?? 'unchanged' }}</p>
+                    @if (approval.status === 'PENDING') {
+                      <div class="d-flex gap-2">
+                        <button class="btn btn-success btn-sm" (click)="decideApproval(approval, 'approve')"
+                                [disabled]="decidingApprovalId === approval.id">Approve resolution</button>
+                        <button class="btn btn-outline-secondary btn-sm" (click)="decideApproval(approval, 'reject')"
+                                [disabled]="decidingApprovalId === approval.id">Reject</button>
+                      </div>
+                    }
+                  </div>
+                }
+                @for (event of selectedRunEvents; track event.id) {
+                  <details class="run-event mb-2">
+                    <summary>{{ event.node }} · {{ event.occurredAt | date : 'HH:mm:ss' }}</summary>
+                    <pre>{{ event.payload }}</pre>
+                  </details>
+                }
+              </div>
+            }
+          }
+        </div>
       </div>
 
       <!-- Right column: AI actions -->

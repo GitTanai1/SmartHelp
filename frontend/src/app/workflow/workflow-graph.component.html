@@ -20,8 +20,13 @@
   </div>
 }
 @if (streamStatus === 'complete') {
-  <div class="alert alert-success py-2 mb-3" role="status">
-    Workflow complete. Final status: <strong>{{ finalStatus }}</strong>
+ <div class="alert alert-success py-2 mb-3" role="status">
+   Workflow complete. Final status: <strong>{{ finalStatus }}</strong>
+ </div>
+}
+@if (streamStatus === 'waiting_approval') {
+  <div class="alert alert-warning py-2 mb-3" role="status">
+    Resolution proposal is waiting for an authorized operator. Open the ticket's Agent Run Explorer to approve or reject it.
   </div>
 }
 @if (streamStatus === 'error') {
@@ -30,12 +35,18 @@
   </div>
 }
 
+<section class="live-status" aria-live="polite">
+  <span class="live-dot" [class.is-active]="streamStatus === 'running' || streamStatus === 'connecting'"></span>
+  <div><span class="eyebrow">Live agent activity</span><strong>{{ liveMessage }}</strong></div>
+  @if (runId) { <span class="live-run">Run {{ runId.slice(0, 8) }}</span> }
+</section>
+
 <div class="workflow-layout">
 
   <!-- SVG Graph -->
   <div class="graph-container">
     <p class="graph-caption mb-2 text-muted small">
-      Click a node to see its details. Green = completed · Blue = running · Grey = skipped.
+      The active node and detail panel update automatically. Completed steps stay visible in the execution path.
     </p>
 
     <svg

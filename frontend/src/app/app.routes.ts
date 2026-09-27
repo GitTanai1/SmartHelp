@@ -6,6 +6,7 @@ import { TicketFormComponent } from './tickets/ticket-form.component';
 import { TicketDetailComponent } from './tickets/ticket-detail.component';
 import { KnowledgeListComponent } from './knowledge/knowledge-list.component';
 import { WorkflowGraphComponent } from './workflow/workflow-graph.component';
+import { OperationsComponent } from './operations/operations.component';
 
 /**
  * Application routes.
@@ -26,6 +27,7 @@ export const routes: Routes = [
   { path: 'tickets/new', component: TicketFormComponent },
   { path: 'tickets/:id', component: TicketDetailComponent },
   { path: 'knowledge', component: KnowledgeListComponent },
+  { path: 'operations', component: OperationsComponent },
   { path: 'workflow/:ticketId', component: WorkflowGraphComponent },
   { path: '**', redirectTo: 'dashboard' },
 ];

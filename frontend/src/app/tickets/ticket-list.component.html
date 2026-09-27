@@ -9,7 +9,7 @@
     <div class="col-12 col-sm-6 col-md-3">
       <label for="filterStatus" class="form-label form-label-sm">Status</label>
       <select id="filterStatus" class="form-select form-select-sm"
-              [(ngModel)]="filterStatus" (change)="applyFilters()">
+              [(ngModel)]="filterStatus" (change)="onFiltersChanged()">
         <option value="">All statuses</option>
         @for (s of statusOptions; track s) {
           <option [value]="s">{{ s }}</option>
@@ -20,7 +20,7 @@
     <div class="col-12 col-sm-6 col-md-3">
       <label for="filterPriority" class="form-label form-label-sm">Priority</label>
       <select id="filterPriority" class="form-select form-select-sm"
-              [(ngModel)]="filterPriority" (change)="applyFilters()">
+              [(ngModel)]="filterPriority" (change)="onFiltersChanged()">
         <option value="">All priorities</option>
         @for (p of priorityOptions; track p) {
           <option [value]="p">{{ p }}</option>
@@ -31,7 +31,7 @@
     <div class="col-12 col-sm-6 col-md-3">
       <label for="filterCategory" class="form-label form-label-sm">Category</label>
       <select id="filterCategory" class="form-select form-select-sm"
-              [(ngModel)]="filterCategoryId" (change)="applyFilters()">
+              [(ngModel)]="filterCategoryId" (change)="onFiltersChanged()">
         <option value="">All categories</option>
         @for (c of categories; track c.id) {
           <option [value]="c.id">{{ c.name }}</option>
@@ -129,7 +129,14 @@
       </tbody>
     </table>
   </div>
-  <p class="text-muted small">
-    Showing {{ filteredTickets.length }} of {{ allTickets.length }} tickets
-  </p>
+  <div class="d-flex justify-content-between align-items-center gap-2">
+    <p class="text-muted small mb-0">
+      Showing {{ filteredTickets.length }} ticket{{ filteredTickets.length === 1 ? '' : 's' }}
+      starting at {{ offset + 1 }}
+    </p>
+    <div class="btn-group btn-group-sm" aria-label="Ticket pagination">
+      <button class="btn btn-outline-secondary" (click)="previousPage()" [disabled]="offset === 0 || loading">Previous</button>
+      <button class="btn btn-outline-secondary" (click)="nextPage()" [disabled]="!hasNextPage || loading">Next</button>
+    </div>
+  </div>
 }
