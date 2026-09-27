@@ -291,6 +291,28 @@ body::before {
   position: relative;
 }
 
+.editorial-intro.has-orb-art {
+  min-height: 290px;
+  align-items: center;
+  padding: 34px 42px;
+  border: 1px solid rgba(21, 38, 75, 0.07);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: url('/images/smarthelp-orb-v1.png') center / cover no-repeat;
+  box-shadow: 0 22px 52px rgba(53, 83, 132, 0.08);
+}
+
+.editorial-intro.has-orb-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(250, 252, 255, 0.92) 0%, rgba(250, 252, 255, 0.72) 42%, rgba(250, 252, 255, 0.04) 72%);
+}
+
+.editorial-intro.has-orb-art > div:first-child { position: relative; z-index: 1; }
+.hero-art-spacer { width: 270px; flex: 0 0 270px; }
+
 .editorial-label {
   font-size: 11px;
   font-weight: 700;
@@ -343,6 +365,18 @@ body::before {
   box-shadow: var(--shadow-soft);
   transition: all 0.2s ease;
   position: relative;
+  overflow: hidden;
+}
+
+.metric-card::after {
+  content: '';
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  right: -60px;
+  bottom: -66px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20, 156, 229, 0.09), transparent 68%);
 }
 
 .metric-card:hover {
@@ -759,12 +793,22 @@ body::before {
 }
 
 /* A restrained glass layer: depth without reducing operational contrast. */
-.sidebar { background: color-mix(in srgb, #0d0e10 88%, transparent); backdrop-filter: blur(20px) saturate(120%); }
-.topbar { background: color-mix(in srgb, #0b0c0d 72%, transparent); backdrop-filter: blur(18px) saturate(115%); }
-.panel, .metrics, .form-card { background: linear-gradient(135deg, rgba(255,255,255,.045), rgba(255,255,255,.018)), rgba(18,20,22,.78); border-color: rgba(255,255,255,.11); box-shadow: 0 16px 45px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.04); backdrop-filter: blur(14px) saturate(115%); }
-.ticket-row:hover, .attention-list > a:hover { background: rgba(255,255,255,.045); }
+
+/* Atmospheric product layer — kept behind content to protect information density. */
+@media (prefers-reduced-motion: reduce) {
+  .panel, .btn-primary { transition: none; }
+}
 
 @media (max-width: 640px) {
+  .editorial-intro.has-orb-art {
+    min-height: 240px;
+    padding: 28px 24px;
+    background-position: 62% center;
+  }
+  .editorial-intro.has-orb-art::after {
+    background: linear-gradient(90deg, rgba(250, 252, 255, .96), rgba(250, 252, 255, .7) 70%, rgba(250, 252, 255, .16));
+  }
+  .hero-art-spacer { display: none; }
   .top-nav {
     padding: 0 20px;
   }

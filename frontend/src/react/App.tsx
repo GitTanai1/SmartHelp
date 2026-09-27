@@ -199,7 +199,7 @@ function Head({
   showOrb?: boolean;
 }) {
   return (
-    <header className="editorial-intro">
+    <header className={`editorial-intro ${showOrb ? 'has-orb-art' : ''}`}>
       <div>
         <div className="editorial-label">// {label}</div>
         <h1 className="editorial-headline">{title}</h1>
@@ -207,11 +207,7 @@ function Head({
         {action && <div style={{ marginTop: '20px' }}>{action}</div>}
       </div>
 
-      {showOrb && (
-        <div style={{ zIndex: 1 }}>
-          <div className="spectral-orb-visual" />
-        </div>
-      )}
+      {showOrb && <div className="hero-art-spacer" aria-hidden="true" />}
     </header>
   );
 }
