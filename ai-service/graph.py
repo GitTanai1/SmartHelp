@@ -1,9 +1,14 @@
 import os
 import re
+import logging
+import time
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
+from checkpoint import CheckpointStore
+from contracts import AiAnalysisResult, CONTRACT_VERSION
+from context import ContextBuilder
 from prompts import (
     CLASSIFICATION_PROMPT,
     RESPONSE_PROMPT,
@@ -11,15 +16,17 @@ from prompts import (
     ClassificationOutput,
     SensitivityOutput,
 )
-from state import NODE_MESSAGES, SmartHelpState, add_path, workflow_event
+from state import NODE_MESSAGES, SmartHelpState, add_path, initial_agent_state, validate_agent_state, workflow_event
 from tools import (
-    create_response,
     escalate_ticket,
     get_customer_history,
     get_ticket,
+    request_resolution_approval,
     search_knowledge_base,
-    update_ticket_status,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -44,6 +51,14 @@ SENSITIVE_TERMS = (
     "privacy",
     "personal data",
     "urgent outage",
+)
+
+PROMPT_INJECTION_TERMS = (
+    "ignore previous instructions",
+    "ignore all previous instructions",
+    "reveal your system prompt",
+    "developer message",
+    "you are now",
 )
 
 
@@ -127,11 +142,20 @@ def _build_llm():
         "model": os.getenv("LLM_MODEL", "gpt-4.1-mini"),
         "api_key": _llm_api_key(),
         "temperature": 0,
+        "timeout": _llm_timeout_seconds(),
+        "max_retries": 1,
     }
     base_url = os.getenv("LLM_BASE_URL", "").strip()
     if base_url:
         kwargs["base_url"] = base_url
     return ChatOpenAI(**kwargs)
+
+
+def _llm_timeout_seconds() -> float:
+    try:
+        return max(1.0, float(os.getenv("LLM_TIMEOUT_SECONDS", "30")))
+    except ValueError:
+        return 30.0
 
 
 def _classify_with_llm(ticket_text: str) -> ClassificationOutput | None:
@@ -141,7 +165,8 @@ def _classify_with_llm(ticket_text: str) -> ClassificationOutput | None:
     try:
         structured = llm.with_structured_output(ClassificationOutput)
         return structured.invoke(CLASSIFICATION_PROMPT.format(ticket_text=ticket_text))
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning("LLM classification failed; using deterministic fallback: %s", exc)
         return None
 
 
@@ -152,7 +177,8 @@ def _sensitivity_with_llm(ticket_text: str) -> SensitivityOutput | None:
     try:
         structured = llm.with_structured_output(SensitivityOutput)
         return structured.invoke(SENSITIVITY_PROMPT.format(ticket_text=ticket_text))
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning("LLM sensitivity check failed; using deterministic fallback: %s", exc)
         return None
 
 
@@ -163,7 +189,8 @@ def _generate_with_llm(ticket_text: str, knowledge_text: str) -> str | None:
     try:
         response = llm.invoke(RESPONSE_PROMPT.format(ticket_text=ticket_text, knowledge_text=knowledge_text))
         return str(response.content).strip()
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning("LLM response generation failed; using deterministic fallback: %s", exc)
         return None
 
 
@@ -185,12 +212,14 @@ def classify_ticket(state: SmartHelpState) -> SmartHelpState:
 
     return {
         "ticket": ticket,
+        "user_id": ticket.get("userId"),
         "ticket_description": ticket_text,
         "category_id": ticket.get("categoryId"),
         "category": category,
         "priority": priority,
         "current_node": "CLASSIFY_TICKET",
         "path": add_path(state, "CLASSIFY_TICKET"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
@@ -203,10 +232,20 @@ def search_knowledge(state: SmartHelpState) -> SmartHelpState:
         subject = ticket.get("subject") or state.get("category") or ""
         articles = search_knowledge_base.invoke({"category_id": None, "query": subject})
 
+    evidence = [
+        {
+            "articleId": article.get("id"),
+            "title": article.get("title", "Untitled"),
+            "categoryId": article.get("categoryId"),
+        }
+        for article in articles[:3]
+    ]
     return {
         "knowledge_results": articles,
+        "evidence": evidence,
         "current_node": "SEARCH_KNOWLEDGE",
         "path": add_path(state, "SEARCH_KNOWLEDGE"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
@@ -228,15 +267,14 @@ def check_confidence(state: SmartHelpState) -> SmartHelpState:
         "confidence": min(score, 1.0),
         "current_node": "CHECK_CONFIDENCE",
         "path": add_path(state, "CHECK_CONFIDENCE"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
 def generate_response(state: SmartHelpState) -> SmartHelpState:
     articles = state.get("knowledge_results", [])
-    knowledge_text = "\n\n".join(
-        f"{item.get('title', '')}: {item.get('content', '')}" for item in articles[:3]
-    )
-    llm_response = _generate_with_llm(state.get("ticket_description", ""), knowledge_text)
+    context = ContextBuilder().build(state.get("ticket_description", ""), articles)
+    llm_response = _generate_with_llm(context.ticket_text, context.knowledge_text)
     if llm_response:
         response = llm_response
     elif articles:
@@ -252,6 +290,7 @@ def generate_response(state: SmartHelpState) -> SmartHelpState:
         "generated_response": response,
         "current_node": "GENERATE_RESPONSE",
         "path": add_path(state, "GENERATE_RESPONSE"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
@@ -259,8 +298,15 @@ def check_sensitivity(state: SmartHelpState) -> SmartHelpState:
     ticket_text = state.get("ticket_description", "")
     lowered = ticket_text.lower()
     llm_result = _sensitivity_with_llm(ticket_text)
-    sensitive = any(term in lowered for term in SENSITIVE_TERMS) or state.get("category") == "Security"
+    injection_attempt = any(term in lowered for term in PROMPT_INJECTION_TERMS)
+    sensitive = (
+        any(term in lowered for term in SENSITIVE_TERMS)
+        or injection_attempt
+        or state.get("category") == "Security"
+    )
     reason = "Sensitive account, billing, legal, privacy, or outage language detected."
+    if injection_attempt:
+        reason = "Potential prompt-injection instruction detected; human review is required."
     if llm_result is not None:
         sensitive = llm_result.sensitive or sensitive
         if llm_result.reason:
@@ -271,37 +317,59 @@ def check_sensitivity(state: SmartHelpState) -> SmartHelpState:
         "escalation_reason": reason if sensitive else None,
         "current_node": "CHECK_SENSITIVITY",
         "path": add_path(state, "CHECK_SENSITIVITY"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
 def escalate(state: SmartHelpState) -> SmartHelpState:
     if state.get("confidence", 0.0) < _confidence_threshold():
         reason = "The knowledge-base match confidence was below the automatic resolution threshold."
+    elif state.get("verification_failure"):
+        reason = state["verification_failure"]
     else:
         reason = state.get("escalation_reason") or "The ticket requires human review."
 
     escalate_ticket.invoke({"ticket_id": state["ticket_id"], "reason": reason})
     return {
         "final_status": "ESCALATED",
+        "status": "COMPLETED",
         "escalation_reason": reason,
         "current_node": "ESCALATE",
         "path": add_path(state, "ESCALATE"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
 def resolve(state: SmartHelpState) -> SmartHelpState:
-    create_response.invoke(
+    request_resolution_approval.invoke(
         {
             "ticket_id": state["ticket_id"],
             "message": state.get("generated_response", ""),
-            "sender_type": "AI",
+            "priority": state.get("priority"),
         }
     )
-    update_ticket_status.invoke({"ticket_id": state["ticket_id"], "status": "RESOLVED", "priority": state.get("priority")})
     return {
-        "final_status": "RESOLVED",
+        "final_status": "WAITING_FOR_APPROVAL",
+        "status": "WAITING_FOR_APPROVAL",
         "current_node": "RESOLVE",
         "path": add_path(state, "RESOLVE"),
+        "iteration_count": len(state.get("path", [])) + 1,
+    }
+
+
+def verify_response(state: SmartHelpState) -> SmartHelpState:
+    """Bounded deterministic verification before a resolution reaches approval."""
+    if not state.get("knowledge_results"):
+        failure = "No retrieved evidence was available to support a resolution proposal."
+    elif not state.get("generated_response", "").strip():
+        failure = "The generated response was empty and cannot be proposed for approval."
+    else:
+        failure = None
+    return {
+        "verification_failure": failure,
+        "current_node": "VERIFY_RESPONSE",
+        "path": add_path(state, "VERIFY_RESPONSE"),
+        "iteration_count": len(state.get("path", [])) + 1,
     }
 
 
@@ -314,7 +382,11 @@ def route_confidence(state: SmartHelpState) -> str:
 def route_sensitivity(state: SmartHelpState) -> str:
     if state.get("is_sensitive", False):
         return "ESCALATE"
-    return "RESOLVE"
+    return "VERIFY_RESPONSE"
+
+
+def route_verification(state: SmartHelpState) -> str:
+    return "ESCALATE" if state.get("verification_failure") else "RESOLVE"
 
 
 def build_graph():
@@ -324,6 +396,7 @@ def build_graph():
     graph.add_node("CHECK_CONFIDENCE", check_confidence)
     graph.add_node("GENERATE_RESPONSE", generate_response)
     graph.add_node("CHECK_SENSITIVITY", check_sensitivity)
+    graph.add_node("VERIFY_RESPONSE", verify_response)
     graph.add_node("ESCALATE", escalate)
     graph.add_node("RESOLVE", resolve)
 
@@ -339,6 +412,11 @@ def build_graph():
     graph.add_conditional_edges(
         "CHECK_SENSITIVITY",
         route_sensitivity,
+        {"ESCALATE": "ESCALATE", "VERIFY_RESPONSE": "VERIFY_RESPONSE"},
+    )
+    graph.add_conditional_edges(
+        "VERIFY_RESPONSE",
+        route_verification,
         {"ESCALATE": "ESCALATE", "RESOLVE": "RESOLVE"},
     )
     graph.add_edge("ESCALATE", END)
@@ -349,29 +427,149 @@ def build_graph():
 WORKFLOW = build_graph()
 
 
+NODE_HANDLERS = {
+    "CLASSIFY_TICKET": classify_ticket,
+    "SEARCH_KNOWLEDGE": search_knowledge,
+    "CHECK_CONFIDENCE": check_confidence,
+    "GENERATE_RESPONSE": generate_response,
+    "CHECK_SENSITIVITY": check_sensitivity,
+    "VERIFY_RESPONSE": verify_response,
+    "ESCALATE": escalate,
+    "RESOLVE": resolve,
+}
+
+MAX_GRAPH_STEPS = len(NODE_HANDLERS)
+
+
+class AgentBudgetExceeded(RuntimeError):
+    """Raised after persisting a terminal budget failure checkpoint."""
+
+
+def _bounded_int_environment(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        return min(maximum, max(minimum, int(os.getenv(name, str(default)))))
+    except ValueError:
+        return default
+
+
+def agent_max_steps() -> int:
+    return _bounded_int_environment("SMARTHELP_AGENT_MAX_STEPS", MAX_GRAPH_STEPS, 1, MAX_GRAPH_STEPS)
+
+
+def agent_max_wall_seconds() -> int:
+    return _bounded_int_environment("SMARTHELP_AGENT_MAX_WALL_SECONDS", 120, 1, 300)
+
+
+def budget_failure_reason(state: SmartHelpState, started_at: float, now: float, max_steps: int, max_wall_seconds: int) -> str | None:
+    """Return a deterministic budget error without executing another workflow node."""
+    if len(state.get("path", [])) >= max_steps:
+        return f"Agent step budget of {max_steps} was exhausted before the next workflow node."
+    if now - started_at >= max_wall_seconds:
+        return f"Agent wall-time budget of {max_wall_seconds} seconds was exhausted."
+    return None
+
+
+def next_node(state: SmartHelpState) -> str | None:
+    """Return the one safe successor for a validated bounded workflow state."""
+    current = state.get("current_node")
+    if current is None:
+        return "CLASSIFY_TICKET"
+    if current == "CLASSIFY_TICKET":
+        return "SEARCH_KNOWLEDGE"
+    if current == "SEARCH_KNOWLEDGE":
+        return "CHECK_CONFIDENCE"
+    if current == "CHECK_CONFIDENCE":
+        return route_confidence(state)
+    if current == "GENERATE_RESPONSE":
+        return "CHECK_SENSITIVITY"
+    if current == "CHECK_SENSITIVITY":
+        return route_sensitivity(state)
+    if current == "VERIFY_RESPONSE":
+        return route_verification(state)
+    if current in {"ESCALATE", "RESOLVE"}:
+        return None
+    raise RuntimeError(f"Cannot resume unknown workflow node: {current}")
+
+
+def _state_for_run(ticket_id: int, run_id: str | None, store: CheckpointStore) -> tuple[SmartHelpState, str | None]:
+    """Load a validated checkpoint, or persist the initial replay-safe boundary."""
+    if run_id:
+        checkpoint = store.load(run_id, ticket_id)
+        if checkpoint is not None:
+            state = validate_agent_state(checkpoint.state).model_dump()
+            return state, checkpoint.next_node
+    state = initial_agent_state(ticket_id, run_id)
+    next_step = next_node(state)
+    if run_id:
+        store.save(run_id, ticket_id, state, next_step)
+    return state, next_step
+
+
+def _run_with_checkpoints(ticket_id: int, run_id: str | None = None):
+    """Execute only uncompleted nodes, persisting after each state transition.
+
+    The checkpoint is intentionally written *before* every node and after every
+    node.  If a crash occurs while a terminal write is in progress, Java's
+    run-scoped idempotency / approval record makes the single repeated terminal
+    node safe on resume.
+    """
+    store = CheckpointStore()
+    state, pending_node = _state_for_run(ticket_id, run_id, store)
+    started_at = time.monotonic()
+    max_steps = agent_max_steps()
+    max_wall_seconds = agent_max_wall_seconds()
+    while pending_node is not None:
+        failure = budget_failure_reason(state, started_at, time.monotonic(), max_steps, max_wall_seconds)
+        if failure:
+            failed_state: SmartHelpState = {
+                **state,
+                "status": "FAILED",
+                "error": failure,
+                "current_node": pending_node,
+            }
+            validated_failed_state = validate_agent_state(failed_state).model_dump()
+            if run_id:
+                store.save(run_id, ticket_id, validated_failed_state, None)
+            raise AgentBudgetExceeded(failure)
+        handler = NODE_HANDLERS[pending_node]
+        running_state: SmartHelpState = {**state, "current_node": pending_node}
+        yield pending_node, "RUNNING", running_state
+        update = handler(state)
+        state.update(update)
+        validated_state = validate_agent_state(state).model_dump()
+        pending_node = next_node(validated_state)
+        state = validated_state
+        if run_id:
+            store.save(run_id, ticket_id, state, pending_node)
+        yield state["current_node"], "COMPLETED", state
+
+
+
 def final_result(state: SmartHelpState) -> dict[str, Any]:
-    return {
-        "ticketId": state["ticket_id"],
-        "category": state.get("category"),
-        "priority": state.get("priority", "MEDIUM"),
-        "confidence": round(float(state.get("confidence", 0.0)), 2),
-        "generatedResponse": state.get("generated_response", ""),
-        "sensitive": bool(state.get("is_sensitive", False)),
-        "finalStatus": state.get("final_status"),
-        "path": " -> ".join(state.get("path", [])),
-    }
+    return AiAnalysisResult(
+        contractVersion=CONTRACT_VERSION,
+        ticketId=state["ticket_id"],
+        category=state.get("category"),
+        priority=state.get("priority", "MEDIUM"),
+        confidence=round(float(state.get("confidence", 0.0)), 2),
+        generatedResponse=state.get("generated_response", ""),
+        sensitive=bool(state.get("is_sensitive", False)),
+        finalStatus=state.get("final_status"),
+        evidence=state.get("evidence", []),
+        path=" -> ".join(state.get("path", [])),
+    ).model_dump(mode="json")
 
 
-def run_analysis(ticket_id: int) -> dict[str, Any]:
-    state = WORKFLOW.invoke({"ticket_id": ticket_id, "path": [], "confidence": 0.0})
-    return final_result(state)
+def run_analysis(ticket_id: int, run_id: str | None = None) -> dict[str, Any]:
+    state: SmartHelpState | None = None
+    for _, status, transition_state in _run_with_checkpoints(ticket_id, run_id):
+        if status == "COMPLETED":
+            state = transition_state
+    if state is None:
+        state, _ = _state_for_run(ticket_id, run_id, CheckpointStore())
+    return final_result(validate_agent_state(state).model_dump())
 
 
-def stream_analysis(ticket_id: int):
-    state: SmartHelpState = {"ticket_id": ticket_id, "path": [], "confidence": 0.0}
-    for chunk in WORKFLOW.stream(state):
-        for node, update in chunk.items():
-            running_state: SmartHelpState = {**state, "current_node": node}
-            yield workflow_event(ticket_id, node, "RUNNING", running_state, NODE_MESSAGES.get(node))
-            state.update(update)
-            yield workflow_event(ticket_id, node, "COMPLETED", state, NODE_MESSAGES.get(node))
+def stream_analysis(ticket_id: int, run_id: str | None = None):
+    for node, status, state in _run_with_checkpoints(ticket_id, run_id):
+        yield workflow_event(ticket_id, node, status, state, NODE_MESSAGES.get(node))
