@@ -23,15 +23,18 @@ import com.smarthelp.dto.TicketDtos.TicketSummary;
 import com.smarthelp.exception.GlobalExceptionHandler;
 import com.smarthelp.exception.ResourceNotFoundException;
 import com.smarthelp.service.TicketService;
+import com.smarthelp.security.CurrentUserAccess;
 
 class TicketControllerTest {
 
     private final TicketService ticketService = org.mockito.Mockito.mock(TicketService.class);
+    private final CurrentUserAccess currentUserAccess = org.mockito.Mockito.mock(CurrentUserAccess.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new TicketController(ticketService))
+        when(currentUserAccess.effectiveTicketUserFilter(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        mockMvc = MockMvcBuilders.standaloneSetup(new TicketController(ticketService, currentUserAccess))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new JacksonJsonHttpMessageConverter())
                 .build();
@@ -77,7 +80,7 @@ class TicketControllerTest {
         LocalDateTime now = LocalDateTime.now();
         TicketSummary summary = new TicketSummary(1L, 1L, "Asha", 2L, "Billing", "Subject", "Description", "OPEN",
                 "LOW", now, now);
-        when(ticketService.findAll(eq("OPEN"), eq(null), eq(null), eq(null))).thenReturn(List.of(summary));
+        when(ticketService.findAll(eq("OPEN"), eq(null), eq(null), eq(null), eq(50), eq(0))).thenReturn(List.of(summary));
 
         mockMvc.perform(get("/api/tickets?status=OPEN"))
                 .andExpect(status().isOk())
@@ -94,5 +97,24 @@ class TicketControllerTest {
         mockMvc.perform(get("/api/tickets/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ticket.subject").value("Subject"));
+    }
+
+    @Test
+    void invalidPaginationReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/tickets?limit=101&offset=-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("limit must be between 1 and 100 and offset must be zero or greater"));
+    }
+
+    @Test
+    void versionedTicketRouteRemainsAvailable() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        TicketSummary summary = new TicketSummary(1L, 1L, "Asha", 2L, "Billing", "Subject", "Description", "OPEN",
+                "LOW", now, now);
+        when(ticketService.findAll(eq(null), eq(null), eq(null), eq(null), eq(50), eq(0))).thenReturn(List.of(summary));
+
+        mockMvc.perform(get("/api/v1/tickets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1));
     }
 }

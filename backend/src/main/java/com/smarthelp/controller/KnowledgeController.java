@@ -18,23 +18,27 @@ import com.smarthelp.dto.KnowledgeDtos.CreateKnowledgeRequest;
 import com.smarthelp.dto.KnowledgeDtos.UpdateKnowledgeRequest;
 import com.smarthelp.model.KnowledgeArticle;
 import com.smarthelp.service.KnowledgeService;
+import com.smarthelp.security.CurrentUserAccess;
 
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/knowledge")
+@RequestMapping({ "/api/v1/knowledge", "/api/knowledge" })
 public class KnowledgeController {
 
     private final KnowledgeService knowledgeService;
+    private final CurrentUserAccess currentUserAccess;
 
-    public KnowledgeController(KnowledgeService knowledgeService) {
+    public KnowledgeController(KnowledgeService knowledgeService, CurrentUserAccess currentUserAccess) {
         this.knowledgeService = knowledgeService;
+        this.currentUserAccess = currentUserAccess;
     }
 
     @PostMapping
     public ResponseEntity<KnowledgeArticle> create(@Valid @RequestBody CreateKnowledgeRequest request) {
+        currentUserAccess.requireAgent();
         KnowledgeArticle article = knowledgeService.create(request);
-        return ResponseEntity.created(URI.create("/api/knowledge/" + article.id())).body(article);
+        return ResponseEntity.created(URI.create("/api/v1/knowledge/" + article.id())).body(article);
     }
 
     @GetMapping
@@ -51,11 +55,13 @@ public class KnowledgeController {
 
     @PutMapping("/{id}")
     public KnowledgeArticle update(@PathVariable Long id, @Valid @RequestBody UpdateKnowledgeRequest request) {
+        currentUserAccess.requireAgent();
         return knowledgeService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        currentUserAccess.requireAgent();
         knowledgeService.delete(id);
         return ResponseEntity.noContent().build();
     }

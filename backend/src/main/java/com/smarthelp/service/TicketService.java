@@ -51,8 +51,8 @@ public class TicketService {
         return ticket;
     }
 
-    public List<TicketSummary> findAll(String status, Long categoryId, Long userId, String priority) {
-        return ticketRepository.findAll(status, categoryId, userId, priority);
+    public List<TicketSummary> findAll(String status, Long categoryId, Long userId, String priority, int limit, int offset) {
+        return ticketRepository.findAll(status, categoryId, userId, priority, limit, offset);
     }
 
     public Ticket findById(Long id) {

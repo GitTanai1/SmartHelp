@@ -27,22 +27,25 @@ public class WebConfig implements WebMvcConfigurer {
      * For preview URLs add each one explicitly, or use allowedOriginPatterns instead.
      */
     private final String extraOrigins;
+    private final boolean oidcEnabled;
 
     public WebConfig(
             @Value("${smarthelp.frontend.origin:http://localhost:4200}") String frontendOrigin,
-            @Value("${smarthelp.extra.origins:}") String extraOrigins) {
+            @Value("${smarthelp.extra.origins:}") String extraOrigins,
+            @Value("${smarthelp.security.oidc-enabled:false}") boolean oidcEnabled) {
         this.frontendOrigin = frontendOrigin;
         this.extraOrigins = extraOrigins;
+        this.oidcEnabled = oidcEnabled;
     }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        // Always include the primary origin + local dev origins
-        Stream<String> base = Stream.of(
-                frontendOrigin,
-                "http://localhost:4200",
-                "http://127.0.0.1:4200"
-        );
+        // Production accepts only explicitly configured browser origins. The
+        // localhost additions are useful for the local-open profile, but are
+        // intentionally absent when OIDC is enabled.
+        Stream<String> base = oidcEnabled
+                ? Stream.of(frontendOrigin)
+                : Stream.of(frontendOrigin, "http://localhost:4200", "http://127.0.0.1:4200");
 
         // Append any extra comma-separated origins from the env var
         Stream<String> extra = extraOrigins.isBlank()

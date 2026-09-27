@@ -1,4 +1,5 @@
--- SmartHelp seed data — applied by Spring Boot spring.sql.init after schema.sql.
+-- Legacy development seed data. Spring Boot does not load this file; apply it
+-- manually only after Flyway has created a local schema.
 -- Uses INSERT IGNORE so re-runs on restart are safe (no duplicate errors).
 
 INSERT IGNORE INTO users (name, email, role) VALUES

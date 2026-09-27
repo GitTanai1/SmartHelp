@@ -5,15 +5,20 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.security.access.AccessDeniedException;
+
+import com.smarthelp.config.RequestIdFilter;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -23,6 +28,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, WebRequest request) {
         return buildError(HttpStatus.NOT_FOUND, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleForbidden(AccessDeniedException ex, WebRequest request) {
+        return buildError(HttpStatus.FORBIDDEN, ex.getMessage(), request);
     }
 
     @ExceptionHandler({ BadRequestException.class, DuplicateKeyException.class, DataIntegrityViolationException.class,
@@ -47,8 +57,14 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiError> buildError(HttpStatus status, String message, WebRequest request) {
         String path = request.getDescription(false).replace("uri=", "");
-        ApiError error = new ApiError(status.value(), status.getReasonPhrase(), message, path, LocalDateTime.now());
-        return ResponseEntity.status(status).body(error);
+        String safeMessage = message == null || message.isBlank() ? status.getReasonPhrase() : message;
+        ApiError error = new ApiError(
+                "https://smarthelp.dev/problems/" + status.value(), status.getReasonPhrase(), safeMessage, path,
+                status.value(), status.getReasonPhrase(), safeMessage, path,
+                MDC.get(RequestIdFilter.MDC_KEY), LocalDateTime.now());
+        return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(error);
     }
 
     private String formatFieldError(FieldError error) {
@@ -56,10 +72,15 @@ public class GlobalExceptionHandler {
     }
 
     public record ApiError(
+            String type,
+            String title,
+            String detail,
+            String instance,
             int status,
             String error,
             String message,
             String path,
+            String requestId,
             LocalDateTime timestamp) {
     }
 }

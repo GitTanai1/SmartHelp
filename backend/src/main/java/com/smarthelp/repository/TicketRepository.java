@@ -71,7 +71,7 @@ public class TicketRepository {
         return findById(keyHolder.getKey().longValue()).orElseThrow();
     }
 
-    public List<TicketSummary> findAll(String status, Long categoryId, Long userId, String priority) {
+    public List<TicketSummary> findAll(String status, Long categoryId, Long userId, String priority, int limit, int offset) {
         StringBuilder sql = new StringBuilder("""
                 SELECT t.id, t.user_id, u.name AS user_name, t.category_id, c.name AS category_name,
                        t.subject, t.description, t.status, t.priority, t.created_at, t.updated_at
@@ -97,7 +97,9 @@ public class TicketRepository {
             sql.append(" AND t.priority = ?");
             params.add(priority);
         }
-        sql.append(" ORDER BY t.created_at DESC, t.id DESC");
+        sql.append(" ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?");
+        params.add(limit);
+        params.add(offset);
         return jdbcTemplate.query(sql.toString(), SUMMARY_ROW_MAPPER, params.toArray());
     }
 

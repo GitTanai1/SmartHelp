@@ -17,42 +17,50 @@ import com.smarthelp.dto.UserDtos.CreateUserRequest;
 import com.smarthelp.dto.UserDtos.UpdateUserRequest;
 import com.smarthelp.model.User;
 import com.smarthelp.service.UserService;
+import com.smarthelp.security.CurrentUserAccess;
 
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping({ "/api/v1/users", "/api/users" })
 public class UserController {
 
     private final UserService userService;
+    private final CurrentUserAccess currentUserAccess;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, CurrentUserAccess currentUserAccess) {
         this.userService = userService;
+        this.currentUserAccess = currentUserAccess;
     }
 
     @PostMapping
     public ResponseEntity<User> create(@Valid @RequestBody CreateUserRequest request) {
+        currentUserAccess.requireAgent();
         User user = userService.create(request);
-        return ResponseEntity.created(URI.create("/api/users/" + user.id())).body(user);
+        return ResponseEntity.created(URI.create("/api/v1/users/" + user.id())).body(user);
     }
 
     @GetMapping
     public List<User> findAll() {
+        currentUserAccess.requireAgent();
         return userService.findAll();
     }
 
     @GetMapping("/{id}")
     public User findById(@PathVariable Long id) {
+        currentUserAccess.requireUserAccess(id);
         return userService.findById(id);
     }
 
     @PutMapping("/{id}")
     public User update(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) {
+        currentUserAccess.requireAgent();
         return userService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        currentUserAccess.requireAgent();
         userService.delete(id);
         return ResponseEntity.noContent().build();
     }

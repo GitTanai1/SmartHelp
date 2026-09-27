@@ -17,23 +17,27 @@ import com.smarthelp.dto.KnowledgeDtos.CreateCategoryRequest;
 import com.smarthelp.dto.KnowledgeDtos.UpdateCategoryRequest;
 import com.smarthelp.model.Category;
 import com.smarthelp.service.CategoryService;
+import com.smarthelp.security.CurrentUserAccess;
 
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/categories")
+@RequestMapping({ "/api/v1/categories", "/api/categories" })
 public class CategoryController {
 
     private final CategoryService categoryService;
+    private final CurrentUserAccess currentUserAccess;
 
-    public CategoryController(CategoryService categoryService) {
+    public CategoryController(CategoryService categoryService, CurrentUserAccess currentUserAccess) {
         this.categoryService = categoryService;
+        this.currentUserAccess = currentUserAccess;
     }
 
     @PostMapping
     public ResponseEntity<Category> create(@Valid @RequestBody CreateCategoryRequest request) {
+        currentUserAccess.requireAgent();
         Category category = categoryService.create(request);
-        return ResponseEntity.created(URI.create("/api/categories/" + category.id())).body(category);
+        return ResponseEntity.created(URI.create("/api/v1/categories/" + category.id())).body(category);
     }
 
     @GetMapping
@@ -48,11 +52,13 @@ public class CategoryController {
 
     @PutMapping("/{id}")
     public Category update(@PathVariable Long id, @Valid @RequestBody UpdateCategoryRequest request) {
+        currentUserAccess.requireAgent();
         return categoryService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        currentUserAccess.requireAgent();
         categoryService.delete(id);
         return ResponseEntity.noContent().build();
     }
