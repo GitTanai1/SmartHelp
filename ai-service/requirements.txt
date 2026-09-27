@@ -3,4 +3,4 @@ uvicorn==0.35.0
 httpx==0.28.1
 langchain-core==1.5.5
 langchain-openai==1.6.5
-langgraph==1.2.11
+langgraph==1.2.12
