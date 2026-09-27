@@ -1,4 +1,5 @@
 .env
+.env.local
 *.log
 
 # Modernization and architecture records are part of the repository contract.

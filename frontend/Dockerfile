@@ -5,12 +5,15 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-ARG ANGULAR_API_BASE_URL=http://localhost:8080/api/v1
-RUN ANGULAR_API_BASE_URL=$ANGULAR_API_BASE_URL node scripts/set-env.js && npm run build
+ARG VITE_API_BASE_URL=http://localhost:8080/api/v1
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
